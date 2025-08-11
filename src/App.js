@@ -1,24 +1,85 @@
-import logo from './logo.svg';
 import './App.css';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import HomeScreen from './pages/HomeScreen';
+import CardapioPage from './pages/CardapioPage';
+import BagPage from './pages/BagPage';
+import InfoPage from './pages/infoPage';
+import Footer from './componentes/footer';
+import ProdutoIndividual from './pages/IndividualPage';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminProducts from './pages/admin/AdminProducts';
+import AdminPedidos from './pages/admin/AdminPedidos';
+import AdminVendas from './pages/admin/AdminVendas';
+import AdminConfiguracoes from './pages/admin/AdminConfiguracoes';
+import SearchPage from './pages/SearchPage';
+import AgendamentoPage from './pages/AgendamentoPage';
+import Login from './pages/admin/Login';
+
+
+// Importa o AuthProvider e PrivateRoute
+import { AuthProvider } from './AuthContext';
+import PrivateRoute from './PrivateRoute';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          {/* Rotas públicas */}
+          <Route path="/" element={<HomeScreen />} />
+          <Route path="/cardapio" element={<CardapioPage />} />
+          <Route path="/sacola" element={<BagPage />} />
+          <Route path="/info" element={<InfoPage />} />
+          <Route path="/individual/:id" element={<ProdutoIndividual />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/agendar" element={<AgendamentoPage />} />
+          <Route path="/login" element={<Login />} />
+
+          {/* Rotas protegidas por PrivateRoute */}
+          <Route
+            path="/admin"
+            element={
+              <PrivateRoute>
+                <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/adminProducts"
+            element={
+              <PrivateRoute>
+                <AdminProducts />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/adminPedidos"
+            element={
+              <PrivateRoute>
+                <AdminPedidos />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/adminVendas"
+            element={
+              <PrivateRoute>
+                <AdminVendas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/adminConfiguracoes"
+            element={
+              <PrivateRoute>
+                <AdminConfiguracoes />
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+        <Footer />
+      </Router>
+    </AuthProvider>
   );
 }
 
