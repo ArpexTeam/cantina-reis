@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Switch, TextField, IconButton, Button, Radio, RadioGroup, FormControlLabel, Checkbox } from '@mui/material';
+import { Box, Typography, Paper, Switch, TextField, Stack, Avatar, IconButton, Button, Radio, RadioGroup, FormControlLabel, Checkbox } from '@mui/material';
 import Sidebar from '../../componentes/admin/sidebar';
 import UploadIcon from '@mui/icons-material/Upload';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
+import logo from '../../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg';
+
 
 export default function AdminConfiguracoes() {
   const [abertoGeral, setAbertoGeral] = useState(true);
@@ -54,10 +56,25 @@ export default function AdminConfiguracoes() {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#F8F8F8', fontFamily: 'Poppins, sans-serif' }}>
+    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#F1F1F1', fontFamily: 'Poppins, sans-serif' }}>
       <Sidebar />
+      <Box sx={{ flexGrow: 1, bgcolor: '#F1F1F1' }}>
 
-      <Box sx={{ flexGrow: 1, p: 4 }}>
+            <Box sx={{
+          width: '100%', height: 80, px: 4, backgroundColor: '#000',
+          color: '#FFF', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', position: 'absolute', left: 0, zIndex: 10
+        }}>
+          <Box sx={{ height: 70 }}>
+            <img src={logo} alt="Logo" style={{ height: '100%' }} />
+          </Box>
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="nowrap">
+          <Avatar src="https://via.placeholder.com/150" />
+          <Typography component="span">Administrador</Typography>
+        </Stack>
+        </Box>
+
+      <Box sx={{ flexGrow: 1, p: 4, mt: 10  }}>
         {/* Título */}
         <Typography variant="h6" fontWeight="bold" textAlign="center">
           Configurações
@@ -129,7 +146,7 @@ export default function AdminConfiguracoes() {
           <Box sx={{ flex: '1 1 300px' }}>
             {/* 🔑 Funcionamento geral manual com Switch */}
             <Paper sx={{ p: 2, mb: 2, boxShadow: 1 }}>
-            <Typography fontWeight="bold" sx={{ mb: 1, fontFamily: 'Poppins, sans-serif' }}>
+            <Typography fontWeight={600} sx={{ mb: 1, fontFamily: 'Poppins, sans-serif', fontSize:'16px', textAlign:'left' }}>
                 Funcionamento do restaurante
             </Typography>
 
@@ -154,7 +171,7 @@ export default function AdminConfiguracoes() {
 
             {/* Horários */}
             <Paper sx={{ p: 2 }}>
-              <Typography fontWeight="bold" mb={2}>
+              <Typography fontWeight={600} textAlign={'left'} fontSize={'16px'} mb={2}>
                 Editar horários semanais
               </Typography>
 
@@ -191,6 +208,7 @@ export default function AdminConfiguracoes() {
             </Paper>
           </Box>
         </Box>
+      </Box>
       </Box>
     </Box>
   );

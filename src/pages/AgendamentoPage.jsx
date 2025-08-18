@@ -1,3 +1,4 @@
+// src/pages/AgendamentoPage.jsx
 import React, { useState } from 'react';
 import {
   Box,
@@ -7,6 +8,8 @@ import {
   Button,
   IconButton,
   InputAdornment,
+  Paper,
+  Grid,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
@@ -15,7 +18,7 @@ import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import { useNavigate } from 'react-router-dom';
 
-import { db } from '../firebase'; // ✅ ajuste se necessário
+import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function AgendamentoPage() {
@@ -61,7 +64,7 @@ export default function AgendamentoPage() {
 
       alert('Pedido agendado com sucesso!');
       localStorage.removeItem('sacola');
-      navigate('/cardapio'); // redirecione para onde quiser
+      navigate('/cardapio');
     } catch (error) {
       console.error('Erro ao salvar pedido:', error);
       alert('Erro ao salvar pedido. Tente novamente.');
@@ -70,121 +73,172 @@ export default function AgendamentoPage() {
 
   return (
     <Container
-      maxWidth="sm"
+      maxWidth="lg"
       sx={{
-        p: 0,
-        bgcolor: '#F5F5F5',
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        px: { xs: 0, sm: 2, md: 3 },
+        py: { xs: 0, md: 4 },
+        bgcolor: { xs: '#F5F5F5', md: '#F5F5F5' },
         fontFamily: 'Poppins, sans-serif',
       }}
     >
-      {/* Topo */}
-      <Box
+      {/* Cabeçalho (mobile-first) */}
+      <Paper
+        elevation={0}
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           px: 2,
-          py: 1,
+          py: 1.5,
           bgcolor: '#FFF',
-          borderBottom: '1px solid #E5E7EB',
+          borderBottom: { xs: '1px solid #E5E7EB', md: 'none' },
+          borderRadius: { xs: 0, md: 2 },
+          mb: { xs: 0, md: 2 },
         }}
       >
-        <IconButton size="small" onClick={() => navigate(-1)}>
+        <IconButton size="small" onClick={() => navigate(-1)} aria-label="Voltar">
           <ArrowBackIcon />
         </IconButton>
-        <Typography fontWeight="bold">Agendar</Typography>
-        <IconButton size="small" onClick={() => navigate(-1)}>
+        <Typography
+          fontWeight="bold"
+          variant="subtitle1"
+          sx={{ fontSize: { xs: 16, md: 18 } }}
+        >
+          Agendar
+        </Typography>
+        <IconButton size="small" onClick={() => navigate(-1)} aria-label="Fechar">
           <CloseIcon />
         </IconButton>
-      </Box>
+      </Paper>
 
-      {/* Formulário */}
-      <Box sx={{ p: 2 }}>
-        <Typography sx={{ mb: 0.5, fontSize: 14 }}>Nome</Typography>
-        <TextField
-          fullWidth
-          placeholder="Seu nome"
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-          sx={{ mb: 2 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <PersonOutlineIcon sx={{ fontSize: 18, color: '#6B7280' }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-
-        <Typography sx={{ mb: 0.5, fontSize: 14 }}>Telefone</Typography>
-        <TextField
-          fullWidth
-          placeholder="(19) 90000-2222"
-          value={telefone}
-          onChange={(e) => setTelefone(e.target.value)}
-          sx={{ mb: 2 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <PhoneAndroidIcon sx={{ fontSize: 18, color: '#6B7280' }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-
-        <Typography sx={{ mb: 0.5, fontSize: 14 }}>Selecione data e horário</Typography>
-        <TextField
-          fullWidth
-          type="datetime-local"
-          value={dataHora}
-          onChange={(e) => setDataHora(e.target.value)}
-          sx={{ mb: 2 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <CalendarTodayIcon sx={{ fontSize: 18, color: '#6B7280' }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-
-        <Typography sx={{ mb: 0.5, fontSize: 14 }}>Envie uma mensagem</Typography>
-        <TextField
-          fullWidth
-          placeholder="Deixe uma observação..."
-          multiline
-          minRows={4}
-          value={mensagem}
-          onChange={(e) => setMensagem(e.target.value)}
-          sx={{ mb: 2 }}
-        />
-      </Box>
-
-      {/* Botão */}
-      <Box sx={{ p: 2 }}>
-        <Button
-          fullWidth
-          variant="contained"
-          onClick={handleSalvarAgendamento}
+      {/* Conteúdo */}
+      <Box
+        sx={{
+          width: '100%',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr' },
+          gap: { xs: 0, md: 3 },
+          alignItems: 'start',
+          justifyItems: 'center',
+        }}
+      >
+        {/* Card do formulário */}
+        <Paper
+          elevation={0}
           sx={{
-            bgcolor: '#F75724',
-            color: '#FFF',
-            textTransform: 'none',
-            borderRadius: '5px',
-            fontWeight: 'bold',
-            py: 1.5,
-            '&:hover': {
-              bgcolor: '#d44b1e',
-            },
+            width: '100%',
+            maxWidth: { xs: '100%', md: 900 },
+            bgcolor: '#FFF',
+            borderRadius: { xs: 0, md: 2 },
+            p: { xs: 2, md: 3 },
+            boxShadow: { xs: 'none', md: '0 2px 12px rgba(0,0,0,0.06)' },
           }}
         >
-          CONFIRMAR AGENDAMENTO
-        </Button>
+          <Grid container spacing={2}>
+            {/* Nome e Telefone lado a lado no desktop */}
+            <Grid item xs={12} md={6}>
+              <Typography sx={{ mb: 0.5, fontSize: 14 }}>Nome</Typography>
+              <TextField
+                fullWidth
+                placeholder="Seu nome"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonOutlineIcon sx={{ fontSize: 18, color: '#6B7280' }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography sx={{ mb: 0.5, fontSize: 14 }}>Telefone</Typography>
+              <TextField
+                fullWidth
+                type="tel"
+                placeholder="(19) 90000-2222"
+                value={telefone}
+                onChange={(e) => setTelefone(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PhoneAndroidIcon sx={{ fontSize: 18, color: '#6B7280' }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+
+            {/* Data/Hora */}
+            <Grid item xs={12} md={6}>
+              <Typography sx={{ mb: 0.5, fontSize: 14 }}>
+                Selecione data e horário
+              </Typography>
+              <TextField
+                fullWidth
+                type="datetime-local"
+                value={dataHora}
+                onChange={(e) => setDataHora(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <CalendarTodayIcon sx={{ fontSize: 18, color: '#6B7280' }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+
+            {/* Mensagem (ocupa largura toda) */}
+            <Grid item xs={12}>
+              <Typography sx={{ mb: 0.5, fontSize: 14 }}>Envie uma mensagem</Typography>
+              <TextField
+                fullWidth
+                placeholder="Deixe uma observação..."
+                multiline
+                minRows={4}
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+              />
+            </Grid>
+
+            {/* Botão: full no mobile, alinhado à direita no desktop */}
+            <Grid item xs={12}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: { xs: 'stretch', md: 'flex-end' },
+                }}
+              >
+                <Button
+                  variant="contained"
+                  onClick={handleSalvarAgendamento}
+                  sx={{
+                    width: { xs: '100%', md: 'auto' },
+                    px: { md: 3 },
+                    bgcolor: '#F75724',
+                    color: '#FFF',
+                    textTransform: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    py: 1.5,
+                    '&:hover': { bgcolor: '#d44b1e' },
+                  }}
+                >
+                  CONFIRMAR AGENDAMENTO
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
       </Box>
+
+      {/* Espaço inferior no mobile para evitar conflito com elementos fixos */}
+      <Box sx={{ height: { xs: 16, md: 0 } }} />
     </Container>
   );
 }

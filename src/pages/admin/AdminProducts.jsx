@@ -10,10 +10,20 @@ import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import MenuIcon from '@mui/icons-material/Menu';
 import EditProductModal from '../../componentes/admin/editProductModal';
-import { collection, getDocs, addDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
-import AddProductModal from '../../componentes/admin/addProductModal';
+import pen from '../../img/penIcon.svg';
+import trash from '../../img/trashIcon.svg';
 
+// >>> Firestore (tempo real + delete)
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc
+} from 'firebase/firestore';
+import { db } from '../../firebase';
+
+import AddProductModal from '../../componentes/admin/addProductModal';
 
 export default function AdminProducts() {
   const [produtos, setProdutos] = useState([]);
@@ -22,7 +32,6 @@ export default function AdminProducts() {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const [addProductModalOpen, setAddProductModalOpen] = useState(false);
-
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,83 +42,102 @@ export default function AdminProducts() {
 
   const [addCategoryModalOpen, setAddCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
+
 
   const handleEditClick = (produto) => {
     setProdutoSelecionado(produto);
     setModalOpen(true);
   };
 
-const handleProdutoAdicionado = (produtoComId) => {
-  setProdutos((prev) => [...prev, produtoComId]);
-};
+  // Mantive compat: quando o modal de adicionar chamar, já injeta no estado.
+  // Com onSnapshot isso não é necessário, mas não atrapalha.
+  const handleProdutoAdicionado = (produtoComId) => {
+    setProdutos((prev) => [...prev, produtoComId]);
+  };
 
+  // ======= Tempo real: produtos + categorias =======
   useEffect(() => {
-    const fetchProdutos = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "produtos"));
-        const produtosData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setProdutos(produtosData);
-        console.log(produtosData);
-      } catch (error) {
-        console.error("Erro ao buscar produtos:", error);
-      }
-    };
+    // Produtos (ordena por nome para consistência visual)
+    const unsubProdutos = onSnapshot(collection(db, 'produtos'), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Ordena por nome (se existir)
+      list.sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
+      setProdutos(list);
+    }, (err) => console.error('onSnapshot produtos:', err));
 
-    const fetchCategorias = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "categorias"));
-        const categoriasData = querySnapshot.docs.map((doc) => doc.data().nome);
-        setCategorias(categoriasData);
-      } catch (error) {
-        console.error("Erro ao buscar categorias:", error);
-      }
-    };
+    // Categorias
+    const unsubCategorias = onSnapshot(collection(db, 'categorias'), (snap) => {
+      const list = snap.docs.map((d) => d.data()?.nome).filter(Boolean);
+      // ordena alfabeticamente
+      list.sort((a, b) => a.localeCompare(b));
+      setCategorias(list);
+    }, (err) => console.error('onSnapshot categorias:', err));
 
-    fetchProdutos();
-    fetchCategorias();
+    return () => {
+      unsubProdutos?.();
+      unsubCategorias?.();
+    };
   }, []);
 
   const handleAddCategoria = async () => {
     if (newCategoryName.trim() === '') return;
 
     try {
-      await addDoc(collection(db, "categorias"), { nome: newCategoryName });
-      setCategorias((prev) => [...prev, newCategoryName]);
+      await addDoc(collection(db, 'categorias'), { nome: newCategoryName.trim() });
       setNewCategoryName('');
       setAddCategoryModalOpen(false);
+      // onSnapshot atualiza a UI sozinho
     } catch (error) {
-      console.error("Erro ao adicionar categoria:", error);
+      console.error('Erro ao adicionar categoria:', error);
     }
   };
 
+const handleDelete = async (id, nome) => {
+  if (!id) return;
+  const ok = window.confirm(`Excluir o produto "${nome ?? 'sem nome'}"?`);
+  if (!ok) return;
+
+  try {
+    setDeletingId(id);
+    await deleteDoc(doc(db, 'produtos', String(id)));
+    // onSnapshot atualiza a tabela automaticamente
+  } catch (e) {
+    console.error('Erro ao excluir produto:', e);
+    // Mostra mensagem mais clara (muito comum: regras do Firestore)
+    alert(e?.message || 'Falha ao excluir o produto.');
+  } finally {
+    setDeletingId(null);
+  }
+};
+
   const calcularStatusEstoque = (estoque, estoqueMinimo) => {
-    console.log(estoque, estoqueMinimo);
-    if (estoque <= 0) return "Acabou";
-    if (estoque <= estoqueMinimo) return "Baixo";
-    return "Acima";
+    const est = Number(estoque ?? 0);
+    const min = Number(estoqueMinimo ?? 0);
+    if (est <= 0) return 'Acabou';
+    if (!Number.isNaN(min) && est <= min) return 'Baixo';
+    return 'Acima';
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "Acima": return "#DEF7EC";
-      case "Baixo": return "#FDF6B2";
-      case "Acabou": return "#FDE8E8";
-      default: return "#E0E0E0";
+      case 'Acima': return '#DEF7EC';
+      case 'Baixo': return '#FDF6B2';
+      case 'Acabou': return '#FDE8E8';
+      default: return '#E0E0E0';
     }
   };
 
   const getStatusFontColor = (status) => {
     switch (status) {
-      case "Acima": return "#03543F";
-      case "Baixo": return "#723B13";
-      case "Acabou": return "#9B1C1C";
-      default: return "#000000";
+      case 'Acima': return '#03543F';
+      case 'Baixo': return '#723B13';
+      case 'Acabou': return '#9B1C1C';
+      default: return '#000000';
     }
   };
 
+  // Filtro/pesquisa
   const produtosFiltrados = produtos.filter((p) => {
     const searchMatch = Object.values(p).some((v) =>
       typeof v === 'string' && v.toLowerCase().includes(searchTerm.toLowerCase())
@@ -118,10 +146,11 @@ const handleProdutoAdicionado = (produtoComId) => {
     return searchMatch && categoriaMatch;
   });
 
-  const totalPages = Math.ceil(produtosFiltrados.length / itemsPerPage);
+  const totalPages = Math.ceil(produtosFiltrados.length / itemsPerPage) || 1;
+  const current = Math.min(currentPage, totalPages); // evita ficar em página inválida após updates
   const produtosExibidos = produtosFiltrados.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    (current - 1) * itemsPerPage,
+    current * itemsPerPage
   );
 
   const handleClickCategorias = (event) => setAnchorEl(event.currentTarget);
@@ -145,11 +174,13 @@ const handleProdutoAdicionado = (produtoComId) => {
           left: 0, zIndex: 10
         }}>
           <Box sx={{ height: 70, width: 'auto' }}>
-            <img src={logo} alt="Logo" style={{ width: "100%", height: "100%" }} />
+            <img src={logo} alt="Logo" style={{ width: '100%', height: '100%' }} />
           </Box>
-          <Box>
-            <Typography sx={{ mr: 2, fontFamily: 'Poppins, sans-serif' }}>Administrador</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
             <Avatar src="https://via.placeholder.com/150" />
+            <Typography component="span" sx={{ display: 'inline-flex' }}>
+              Administrador
+            </Typography>
           </Box>
         </Box>
 
@@ -232,8 +263,7 @@ const handleProdutoAdicionado = (produtoComId) => {
                 fontWeight: 500,
                 '&:hover': { bgcolor: '#e64c1a' },
               }}
-            onClick={() => setAddProductModalOpen(true)}
-
+              onClick={() => setAddProductModalOpen(true)}
             >
               Adicionar produto
             </Button>
@@ -253,12 +283,13 @@ const handleProdutoAdicionado = (produtoComId) => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {produtosExibidos.map((produto, index) => {
-                  const statusEstoque = calcularStatusEstoque(produto.estoque, produto.estoqueMinimo);
+                {produtosExibidos.map((produto) => {
+                  const estoqueMin = produto.estoqueMin ?? produto.estoqueMinimo ?? 0; // compatibilidade
+                  const statusEstoque = calcularStatusEstoque(produto.estoque, estoqueMin);
                   return (
-                    <TableRow key={produto.id || index}>
+                    <TableRow key={produto.id}>
                       <TableCell>{produto.nome}</TableCell>
-                      <TableCell>{produto.estoque || '-'}</TableCell>
+                      <TableCell>{produto.estoque ?? '-'}</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>{produto.categoria || '-'}</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>
                         {produto.precos?.pequeno ? `R$ ${produto.precos.pequeno}` : 'R$ 0,00'}
@@ -277,14 +308,35 @@ const handleProdutoAdicionado = (produtoComId) => {
                           {statusEstoque}
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <IconButton sx={{ backgroundColor: '#00B856', borderRadius: 1, marginRight: 2 }} onClick={() => handleEditClick(produto)}>
-                          <FiEdit size={16} color="white" />
-                        </IconButton>
-                        <IconButton sx={{ backgroundColor: '#F75724', borderRadius: 1 }}>
-                          <FiTrash2 size={16} color="white" />
-                        </IconButton>
-                      </TableCell>
+                      <TableCell sx={{
+                        display:'flex',
+                        gap:2,
+                        padding:3
+                      }}>
+                          <img
+                          src={pen}
+                            style={{ 
+                              width:15,
+                              cursor:'pointer',
+                            }}
+                            onClick={() => handleEditClick(produto)}
+                            title="Editar"
+                          />
+                           
+
+                          <img
+                          src={trash}
+                          style={{
+                            width:15,
+                            cursor:'pointer',
+                          }}
+                            onClick={() => handleDelete(produto.id, produto.nome)}
+                            disabled={deletingId === produto.id}
+                            title={deletingId === produto.id ? 'Excluindo...' : 'Excluir'}
+                          />
+                            
+                     </TableCell>
+
                     </TableRow>
                   );
                 })}
@@ -293,7 +345,7 @@ const handleProdutoAdicionado = (produtoComId) => {
           </Paper>
 
           {/* Paginação */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, gap:0 }}>
             {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
               <Button
                 key={page}
@@ -303,7 +355,7 @@ const handleProdutoAdicionado = (produtoComId) => {
                   minWidth: '40px',
                   height: '40px',
                   border: '1px solid #D1D5DB',
-                  bgcolor: page === currentPage ? '#F3F4F6' : '#FFFFFF',
+                  bgcolor: page === current ? '#F3F4F6' : '#FFFFFF',
                   color: '#374151',
                   borderRadius: 0,
                   fontFamily: 'Poppins, sans-serif',

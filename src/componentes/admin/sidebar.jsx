@@ -101,7 +101,7 @@ export default function Sidebar() {
         </ListItemButton>
 
         {/* Nota fiscal */}
-        <ListItemButton onClick={() => navigate('/info')}>
+        <ListItemButton onClick={() => navigate('/adminNFE')}>
           <ListItemIcon sx={{ minWidth: 30 }}>
             <FiFileText size={18} />
           </ListItemIcon>

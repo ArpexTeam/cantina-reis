@@ -81,12 +81,12 @@ export default function AdminVendas() {
           <Box sx={{ height: 70, width: 'auto' }}>
             <img src={logo} alt="Logo" style={{ width: "100%", height: "100%" }} />
           </Box>
-          <Box>
-            <Typography sx={{ mr: 2, fontFamily: 'Poppins, sans-serif' }}>
-              Administrador
-            </Typography>
-            <Avatar src="https://via.placeholder.com/150" />
-          </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
+          <Avatar src="https://via.placeholder.com/150" />
+          <Typography component="span" sx={{ display: 'inline-flex' }}>
+            Administrador
+          </Typography>
+        </Box>
         </Box>
 
         <Box sx={{ p: 4 }}>

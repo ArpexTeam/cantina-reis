@@ -17,7 +17,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import CloseIcon from '@mui/icons-material/Close';
 import arrowDown from '../../img/fill-arrow-down.svg';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 
 export default function AddProductModal({ open, onClose, onProdutoAdicionado }) {
@@ -30,6 +30,10 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
   const [estoqueMinimo, setEstoqueMinimo] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+
+  // Categoria
+  const [categoria, setCategoria] = useState('');
+  const [categorias, setCategorias] = useState([]);
 
   // Campos fiscais
   const [codigo, setCodigo] = useState('');
@@ -55,7 +59,23 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
   const [addingGuarnicao, setAddingGuarnicao] = useState(false);
 
   useEffect(() => {
-    if (!open) resetForm();
+    if (!open) {
+      resetForm();
+      return;
+    }
+    // Carrega categorias quando o modal abrir
+    (async () => {
+      try {
+        const qs = await getDocs(collection(db, 'categorias'));
+        const list = qs.docs
+          .map(d => d.data()?.nome)
+          .filter(Boolean)
+          .sort((a, b) => String(a).localeCompare(String(b)));
+        setCategorias(list);
+      } catch (e) {
+        console.error('Erro ao carregar categorias:', e);
+      }
+    })();
   }, [open]);
 
   const resetForm = () => {
@@ -71,7 +91,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
     setEditingGuarnicaoIndex(null);
     setGuarnicaoInput('');
     setAddingGuarnicao(false);
-
+    setCategoria('');
     // Fiscais
     setCodigo('');
     setNcm('');
@@ -161,6 +181,10 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         estoque,
         estoqueMin: estoqueMinimo,
         imagem: finalImageUrl,
+        // 👇 Vincula categoria
+        categoria: categoria || null,
+
+        // Fiscais
         codigo,
         ncm,
         cfop,
@@ -174,7 +198,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         cst_cofins,
         aliquota_cofins,
         cEAN,
-        cEANTrib
+        cEANTrib,
       };
 
       const docRef = await addDoc(collection(db, 'produtos'), novoProduto);
@@ -186,7 +210,6 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
       alert('Produto adicionado com sucesso!');
       resetForm();
       onClose();
-
     } catch (error) {
       console.error('Erro ao salvar produto:', error);
       alert('Erro ao salvar produto');
@@ -195,43 +218,148 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
 
   return (
     <Modal open={open} onClose={onClose}>
-      <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 900, maxHeight: '90vh', bgcolor: 'white', p: 4, overflowY: 'auto', borderRadius: 2 }}>
+      <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 900, maxHeight: '90vh', bgcolor: '#F2F2F2', overflowY: 'auto', borderRadius: 2 }}>
         <IconButton onClick={onClose} sx={{ position: 'absolute', top: 16, right: 16 }}>
           <CloseIcon />
         </IconButton>
 
-        <Typography variant="h6" fontWeight="bold" mb={2}>
+        <Paper sx={{ p:1, pl: 3, mb: 0.2, width:'100%' }}>
+        <Typography variant="h6" fontWeight="bold" mb={2} mt={2}>
           Adicionar novo produto
         </Typography>
+        </Paper>
 
         {/* Imagem e Nome */}
-        <Paper sx={{ p: 2, mb: 2 }}>
+        <Paper sx={{ p: 3, mb: 1, width:'100%' }}>
           <Box sx={{ display: "flex", gap: 5 }}>
             <Grid item xs={4}>
-              <Box sx={{ position: 'relative', width: '200px', aspectRatio: '1 / 1', borderRadius: 2, overflow: 'hidden' }}>
-                {imageUrl && <img src={imageUrl} alt="Produto" style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />}
-                <IconButton component="label" sx={{ position: 'absolute', bottom: 8, right: 8, backgroundColor: '#FFF', border: '1px solid #DDD', '&:hover': { backgroundColor: '#f0f0f0' } }}>
-                  <CameraAltIcon />
+              <Box
+                sx={{
+                  position: 'relative',
+                  width: 200,
+                  aspectRatio: '1 / 1',
+                  borderRadius: 2,
+                  border: '1px solid #E5E7EB',
+                  bgcolor: imageUrl ? 'transparent' : '#F9FAFB',
+                  transition: 'border-color .15s ease',
+                  '&:hover': { borderColor: '#D1D5DB' },
+                }}
+              >
+                {imageUrl && (
+                  <img
+                    src={imageUrl}
+                    alt="Produto"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                )}
+                <IconButton
+                  component="label"
+                  sx={{
+                    position: 'absolute',
+                    bottom: -11,
+                    right: -11,
+                    backgroundColor: '#FFF',
+                    border: '1px solid #DDD',
+                    '&:hover': { backgroundColor: '#f0f0f0' },
+                  }}
+                >
+                  <CameraAltIcon sx={{color:'#F24822'}}/>
                   <input type="file" accept="image/*" hidden onChange={handleImageSelect} />
                 </IconButton>
               </Box>
             </Grid>
             <Grid item xs={8}>
-              <TextField fullWidth label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} sx={{ mb: 2 }} />
-              <TextField fullWidth label="Descrição" multiline rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+              <TextField
+                fullWidth
+                label="Nome"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Descrição"
+                multiline
+                rows={4}
+                value={descricao}
+       
+                onChange={(e) => setDescricao(e.target.value)}
+              />
             </Grid>
           </Box>
         </Paper>
 
-        {/* Preços */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography fontWeight="bold" mb={2}>Preços</Typography>
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between' }}>
-            {['pequeno', 'medio', 'grande'].map((size) => (
-              <TextField key={size} label={`Preço ${size}`} value={precos[size] || ''} onChange={(e) => setPrecos({ ...precos, [size]: e.target.value })} size="small" sx={{ width: '200px' }} />
-            ))}
+        {/* Preços + Categoria + Status */}
+        <Paper sx={{ p: 3, mb: 1 }}>
+          <Typography fontWeight={500} fontSize={16} mb={2}>Preços / Categoria / Status</Typography>
+
+          {/* Categoria */}
+          <Box sx={{ mb: 2, maxWidth: 320 }}>
+            <TextField
+              select
+              fullWidth
+              size="small"
+              label="Categoria"
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              helperText={categorias.length ? '' : 'Nenhuma categoria cadastrada'}
+            >
+              {categorias.map((c) => (
+                <MenuItem key={c} value={c}>{c}</MenuItem>
+              ))}
+            </TextField>
           </Box>
-          <Button variant="contained" onClick={handleStatusClick} sx={{ mt: 2, bgcolor: '#00B856', textTransform: 'none', borderRadius: '4px' }}>
+
+          {/* Preços */}
+ <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+  {['pequeno', 'medio', 'grande'].map((size) => (
+    <TextField
+      key={size}
+      value={precos[size] || ''}
+      onChange={(e) => setPrecos({ ...precos, [size]: e.target.value })}
+      size="small"
+      variant="outlined"
+      placeholder="R$ 0,00"
+      InputProps={{
+        sx:{
+          padding:0,
+          height:"30px"
+        }
+      }}
+      InputLabelProps={{
+        shrink: true,            // 👈 mantém o label sempre acima
+        sx: {
+          position: 'relative',  // tira do posicionamento absoluto
+          transform: 'none',     // remove a transformação padrão
+          mb: 0.5,               // espaço entre label e input
+          fontSize: 12,
+          color: '#6B7280',
+          fontWeight: 500,
+        },
+      }}
+      label={`Preço ${size}`}
+      sx={{
+        width: 150,
+        '& .MuiOutlinedInput-root': { mt: 0.5 }, // compensa a altura do label
+        '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' }, // remove o notch
+      }}
+    />
+  ))}
+</Box>
+
+
+          {/* Status */}
+          <Button
+            variant="contained"
+            onClick={handleStatusClick}
+            sx={{ mt: 2, bgcolor: '#00B856', textTransform: 'none', borderRadius: '6px', px:2, py:0.3 }}
+          >
             {status}
             <img src={arrowDown} style={{ marginLeft: '8px' }} alt="Arrow" />
           </Button>
@@ -243,13 +371,13 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         </Paper>
 
         {/* Guarnições */}
-        <Paper sx={{ p: 2, mb: 2 }}>
+        <Paper sx={{ p: 2, mb: 1 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
             <Box>
-              <Typography fontWeight={700}>Guarnições</Typography>
+              <Typography fontWeight={500} fontSize={16}>Adicionar Guarnições</Typography>
               <Typography variant="body2" fontSize="12px" sx={{ color: '#6B7280' }}>Ingredientes, sabores, talheres...</Typography>
             </Box>
-            <Button variant="outlined" sx={{ minWidth: '32px', height: '32px', borderColor: '#F75724', color: '#F75724' }} onClick={handleStartAddGuarnicao}>
+            <Button variant="outlined" sx={{ minWidth: '32px', height: '42px', borderColor: '#F75724', color: '#F75724' }} onClick={handleStartAddGuarnicao}>
               <AddIcon sx={{ fontSize: '20px' }} />
             </Button>
           </Box>
@@ -280,21 +408,82 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         </Paper>
 
         {/* Estoque */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography fontWeight="bold" mb={2}>Controle de estoque</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField fullWidth size="small" label="Estoque" value={estoque} onChange={(e) => setEstoque(e.target.value)} />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField fullWidth size="small" label="Estoque mínimo" value={estoqueMinimo} onChange={(e) => setEstoqueMinimo(e.target.value)} />
-            </Grid>
-          </Grid>
-        </Paper>
+ <Paper sx={{ p: 2, mb: 1 }}>
+  <Typography fontWeight={500} fontSize={16} mb={2}>
+    Controle de estoque
+  </Typography>
+
+  <Grid container spacing={2}>
+    <Grid item xs={6}>
+      <TextField
+        fullWidth
+        size="small"
+        variant="outlined"
+        label="Estoque"
+        value={estoque}
+        onChange={(e) => setEstoque(e.target.value)}
+        InputProps={{
+        sx:{
+          padding:0,
+          height:"30px"
+        }
+      }}
+        InputLabelProps={{
+          shrink: true,
+          sx: {
+            position: 'relative',
+            transform: 'none',
+            mb: 0.5,
+            fontSize: 12,
+            color: '#6B7280',
+            fontWeight: 600,
+          },
+        }}
+        sx={{
+          '& .MuiOutlinedInput-root': { mt: 0.5 },
+          '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+        }}
+      />
+    </Grid>
+
+    <Grid item xs={6}>
+      <TextField
+        fullWidth
+        size="small"
+        variant="outlined"
+        label="Estoque mínimo"
+        value={estoqueMinimo}
+        onChange={(e) => setEstoqueMinimo(e.target.value)}
+        InputProps={{
+        sx:{
+          padding:0,
+          height:"30px"
+        }
+      }}
+        InputLabelProps={{
+          shrink: true,
+          sx: {
+            position: 'relative',
+            transform: 'none',
+            mb: 0.5,
+            fontSize: 12,
+            color: '#6B7280',
+            fontWeight: 600,
+          },
+        }}
+        sx={{
+          '& .MuiOutlinedInput-root': { mt: 0.5 },
+          '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+        }}
+      />
+    </Grid>
+  </Grid>
+</Paper>
+
 
         {/* Campos fiscais */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography fontWeight="bold" mb={2}>Dados fiscais NF-e</Typography>
+        <Paper sx={{ p: 2, mb: 1 }}>
+          <Typography fontWeight={500} fontSize={16} mb={2}>Dados fiscais NF-e</Typography>
           <Grid container spacing={2}>
             <Grid item xs={4}><TextField fullWidth size="small" label="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} /></Grid>
             <Grid item xs={4}><TextField fullWidth size="small" label="NCM" value={ncm} onChange={(e) => setNcm(e.target.value)} /></Grid>
@@ -313,9 +502,14 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
           </Grid>
         </Paper>
 
-        <Button variant="contained" sx={{ mt: 3, bgcolor: '#00B856' }} onClick={handleSalvar}>
-          Adicionar produto
+        <Paper sx={{ p: 2, display:'flex', justifyContent:'center', gap:2 }}>
+        <Button variant="contained" sx={{ textTransform:'capitalize', fontFamily: "Poppins, sans-serif", fontWeight:500, fontSize:14, mt: 3, bgcolor: '#F75724', py:1, px:5 }} onClick={handleSalvar}>
+          Confirmar
         </Button>
+          <Button variant="contained" sx={{textTransform:'capitalize', fontFamily: "Poppins, sans-serif", fontWeight:500, fontSize:14, mt: 3, border:'2px solid #F75724', color:'#F75724', bgcolor:'transparent', py:1, px:5 }} onClick={onClose}>
+          Cancelar
+        </Button>
+        </Paper>
       </Box>
     </Modal>
   );

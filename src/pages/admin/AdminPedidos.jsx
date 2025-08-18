@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Avatar, Paper, Table, TableHead, TableBody, TableRow, TableCell,
-  Button, TextField, MenuItem, Menu, IconButton
+  Button, TextField, MenuItem, Menu, IconButton, Stack
 } from '@mui/material';
 import Sidebar from '../../componentes/admin/sidebar';
 import { collection, getDocs, query, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
@@ -120,10 +120,10 @@ export default function AdminPedidos() {
           <Box sx={{ height: 70 }}>
             <img src={logo} alt="Logo" style={{ height: '100%' }} />
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography sx={{ mr: 2 }}>Administrador</Typography>
-            <Avatar src="https://via.placeholder.com/150" />
-          </Box>
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="nowrap">
+          <Avatar src="https://via.placeholder.com/150" />
+          <Typography component="span">Administrador</Typography>
+        </Stack>
         </Box>
 
         <Box sx={{ p: 4, mt: 10 }}>
@@ -229,7 +229,11 @@ export default function AdminPedidos() {
                           textTransform: 'none',
                           fontSize: '12px',
                           py: 0.5,
-                          px: 1.5
+                          px: 1.5,
+                             '&:hover': {
+                              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                              transform: 'translateY(-1px)',
+                            },
                         }}
                       >
                         Aprovar
@@ -245,7 +249,11 @@ export default function AdminPedidos() {
     fontSize: '12px',
     py: 0.5,
     px: 1.5,
-    mr: 1
+    mr: 1,
+    '&:hover': {
+    boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+    transform: 'translateY(-1px)',
+  },
   }}
 >
   Cancelar
@@ -287,7 +295,7 @@ export default function AdminPedidos() {
           </Paper>
 
           {/* Paginação */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, gap: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
             {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
               <Button
                 key={page}

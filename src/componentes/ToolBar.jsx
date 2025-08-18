@@ -1,64 +1,92 @@
 import React from 'react';
 import { Box, Button, IconButton } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import ShareIcon from '@mui/icons-material/Share';
 import { Link } from 'react-router-dom';
-
+import pin from '../img/pinIcon.svg';
+import share from '../img/shareIcon.svg';
 
 export default function Toolbar() {
+  const onShare = async () => {
+    const shareData = {
+      title: document.title || 'Cantina Reis',
+      text: 'Dá uma olhada no cardápio da Cantina Reis!',
+      url: window.location.href,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareData.url);
+        alert('Link copiado para a área de transferência!');
+      }
+    } catch {}
+  };
+
   return (
     <Box
       sx={{
         display: 'flex',
-        justifyContent: 'start',
         alignItems: 'center',
-        justifyContent:'space-between',
-        backgroundColor: '#f5f5f5',
-        padding: '12px 8px',
-        width:"100vw",
+        justifyContent: 'space-between',
+        bgcolor: '#f5f5f5',
+        width: '100%',
+        maxWidth: { md: 980, lg: 1200 },
+        mx: 'auto',
+        px: { xs: 1.5, md: 2 },
+        py: { xs: 1, md: 1.5 },
         fontFamily: 'Poppins, sans-serif',
+        gap: 1.5,
       }}
     >
-      {/* Botão de busca com fundo branco e sombra leve */}
+      {/* Busca */}
       <Button
         component={Link}
         to="/search"
+        aria-label="Buscar"
         sx={{
-          backgroundColor: '#fff',
-          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+          bgcolor: '#fff',
+          boxShadow: '4px 3px 6px rgba(0,0,0,0.10)',
           borderRadius: '8px',
-          height: '30px',
-          padding:'5px',
-          minWidth:'0',
+          minWidth: 0,
+          p: { xs: 1, md: 0.75 },
+          height: { xs: 32, md: 36 },
+          '&:hover': { bgcolor: '#fff', boxShadow: '0 3px 10px rgba(0,0,0,0.12)' },
         }}
       >
-        <SearchIcon sx={{ color: '#000', fontSize: 20 }} />
+        <SearchIcon sx={{ color: '#111', fontSize: { xs: 20, md: 22 } }} />
       </Button>
 
-      {/* Botões à direita */}
-      <Box sx={{ display: 'flex', gap: '12px', }}>
+      {/* Ações à direita */}
+      <Box sx={{ display: 'flex', gap: { xs: 1, md: 1.5 }, alignItems: 'center' }}>
         <Button
           variant="contained"
           disableElevation
-          startIcon={<RoomOutlinedIcon />}
-          component='a'
+          startIcon={
+            <img
+              src={pin}
+              alt=""
+              style={{ width: 16, height: 16, display: 'block' }}
+            />
+          }
+          component="a"
           target="_blank"
-          href='https://maps.app.goo.gl/XdhApJN9sTzrD1nh8'
+          href="https://maps.app.goo.gl/XdhApJN9sTzrD1nh8"
           rel="noopener noreferrer"
           sx={{
-            backgroundColor: '#fff',
+            bgcolor: '#fff',
             color: '#000',
-            borderRadius: '5px',
+            borderRadius: '6px',
             textTransform: 'none',
-            fontSize: '10px',
-            fontWeight: 500,
-            padding: '8px 12px',
+            fontSize: { xs: 10, md: 12 },
+            fontWeight: 600,
+            px: { xs: 1, md: 1.5 },
+            py: { xs: 0.75, md: 1 },
             minWidth: 'auto',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-            textWrap:'nowrap',
-            height:'fit-content',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.10)',
+            '&:hover': { bgcolor: '#f9fafb', boxShadow: '0 3px 10px rgba(0,0,0,0.12)' },
+            gap: { xs: 0.5, md: 0.75 },
           }}
         >
           Ver mapa
@@ -71,33 +99,40 @@ export default function Toolbar() {
           disableElevation
           startIcon={<InfoOutlinedIcon />}
           sx={{
-            backgroundColor: '#fff',
+            bgcolor: '#fff',
             color: '#000',
-            borderRadius: '5px',
+            borderRadius: '6px',
             textTransform: 'none',
-            fontSize: '10px',
-            fontWeight: 500,
-            padding: '8px 12px',
+            fontSize: { xs: 10, md: 12 },
+            fontWeight: 600,
+            px: { xs: 1, md: 1.5 },
+            py: { xs: 0.75, md: 1 },
             minWidth: 'auto',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-            textWrap:'nowrap',
-            height:'fit-content',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.10)',
+            '&:hover': { bgcolor: '#f9fafb', boxShadow: '0 3px 10px rgba(0,0,0,0.12)' },
+            gap: { xs: 0.5, md: 0.75 },
           }}
         >
           Informações
         </Button>
 
         <IconButton
+          aria-label="Compartilhar"
+          onClick={onShare}
           sx={{
-            backgroundColor: '#fff',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+            bgcolor: '#fff',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.10)',
             borderRadius: '8px',
-            width: '30px',
-            height: '30px',
-            padding: '18px',
+            width: { xs: 32, md: 36 },
+            height: { xs: 32, md: 36 },
+            p: 0,
+            '&:hover': { bgcolor: '#f9fafb', boxShadow: '0 3px 10px rgba(0,0,0,0.12)' },
+            display: 'grid',
+            placeItems: 'center',
           }}
         >
-          <ShareIcon sx={{ color: '#000', fontSize: 20 }} />
+          <img src={share} alt="Compartilhar" style={{ width: 18, height: 18, display: 'block' }} />
         </IconButton>
       </Box>
     </Box>

@@ -28,59 +28,84 @@ console.log("Usuário atual:", auth.currentUser);
   const [clientesAtendidos, setClientesAtendidos] = useState(0);
   const [produtosBaixoEstoque, setProdutosBaixoEstoque] = useState(0);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const pedidosSnapshot = await getDocs(collection(db, 'pedidos'));
-        let totalVendasTemp = 0;
-        let totalProdutosTemp = 0;
-        let pedidosAprovados = 0;
-        let clientesSet = new Set();
+useEffect(() => {
+  const isApprovedStatus = (s) => {
+    const t = String(s ?? '').toLowerCase();
+    return (
+      ['pago','aprovado','approved','paid','capturado','captured','autorizado','authorized']
+        .some(k => t.includes(k)) || t === '2'
+    );
+  };
 
-        const statusAceitos = ['aprovado', 'pago'];
+  const getQty = (item) => Number(item?.quantidade ?? item?.quantity ?? item?.qtd ?? 0);
+  const getUnitPrice = (item) => Number(item?.precoSelecionado ?? item?.preco ?? item?.price ?? 0);
 
-        pedidosSnapshot.forEach((doc) => {
-          const data = doc.data();
+  const fetchDashboardData = async () => {
+    try {
+      const pedidosSnapshot = await getDocs(collection(db, 'pedidos'));
 
-          if (statusAceitos.includes(data.status)) {
-            pedidosAprovados++;
+      let totalVendasAprov = 0;
+      let totalProdutosAprov = 0;
+      let pedidosAprovados = 0;
+      const clientesAprov = new Set();
 
-            if (Array.isArray(data.itens)) {
-              data.itens.forEach((item) => {
-                totalProdutosTemp += item.quantidade || 0;
-                totalVendasTemp += (item.quantidade || 0) * (item.preco || 0);
-              });
-            }
+      pedidosSnapshot.forEach((pedidoDoc) => {
+        const data = pedidoDoc.data();
+        if (!isApprovedStatus(data.status)) return;
 
-            if (data.telefone) clientesSet.add(data.telefone);
+        // ➜ incrementa!
+        pedidosAprovados++;
+
+        // soma itens (fallback para 'total' se não houver itens)
+        if (Array.isArray(data.itens) && data.itens.length) {
+          for (const item of data.itens) {
+            const q = getQty(item);
+            const p = getUnitPrice(item);
+            totalProdutosAprov += q;
+            totalVendasAprov += q * p;
           }
-        });
+        } else if (!isNaN(Number(data.total))) {
+          totalVendasAprov += Number(data.total);
+        }
 
-        const ticketMedioTemp = pedidosAprovados > 0 ? totalVendasTemp / pedidosAprovados : 0;
+        // cliente único
+        const chaveCliente =
+          data.telefone ??
+          data.cliente?.fone ??
+          data.cliente?.telefone ??
+          data.cliente?.email ??
+          data.cliente?.cpf ??
+          data.userId;
+        if (chaveCliente) clientesAprov.add(String(chaveCliente));
+      });
 
-        setTotalProdutosVendidos(totalProdutosTemp);
-        setTotalVendas(totalVendasTemp);
-        setTotalPedidos(pedidosAprovados);
-        setTicketMedio(ticketMedioTemp);
-        setClientesAtendidos(clientesSet.size);
+      const ticketMedioAprov = pedidosAprovados ? (totalVendasAprov / pedidosAprovados) : 0;
 
-        const produtosSnapshot = await getDocs(collection(db, 'produtos'));
-        const produtosBaixo = produtosSnapshot.docs.filter(
-          (doc) => {
-            const data = doc.data();
-            return data.estoque !== undefined && data.estoqueMin !== undefined && data.estoque <= data.estoqueMin;
-          }
-        ).length;
+      setTotalProdutosVendidos(totalProdutosAprov);
+      setTotalVendas(totalVendasAprov);
+      setTotalPedidos(pedidosAprovados);
+      setTicketMedio(ticketMedioAprov);
+      setClientesAtendidos(clientesAprov.size);
 
-        setProdutosBaixoEstoque(produtosBaixo);
+      // Produtos com estoque baixo (strings → número)
+      const produtosSnapshot = await getDocs(collection(db, 'produtos'));
+      const produtosBaixo = produtosSnapshot.docs.filter((p) => {
+        const d = p.data();
+        const estoque = Number(d.estoque ?? 0);
+        const estoqueMin = Number(d.estoqueMin ?? d.estoqueMinimo ?? 0);
+        return !isNaN(estoque) && !isNaN(estoqueMin) && estoque <= estoqueMin;
+      }).length;
 
-      } catch (error) {
-        console.error('Erro ao buscar dados do dashboard:', error);
-      }
-    };
+      setProdutosBaixoEstoque(produtosBaixo);
+    } catch (error) {
+      console.error('Erro ao buscar dados do dashboard:', error);
+    }
+  };
 
-    fetchDashboardData();
-  }, []);
+  fetchDashboardData();
+}, []); // roda uma vez
+
+
 
   const cards = [
     {
@@ -140,11 +165,11 @@ console.log("Usuário atual:", auth.currentUser);
           <Box sx={{ height: 70, width: 'auto' }}>
             <img src={logo} alt="Logo" style={{ width: "100%", height: "100%" }} />
           </Box>
-          <Box>
-            <Typography sx={{ mr: 2, fontFamily: 'Poppins, sans-serif' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
+            <Avatar src="https://via.placeholder.com/150" />
+            <Typography component="span" sx={{ display: 'inline-flex' }}>
               Administrador
             </Typography>
-            <Avatar src="https://via.placeholder.com/150" />
           </Box>
         </Box>
 

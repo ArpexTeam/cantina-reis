@@ -14,9 +14,9 @@ import AdminConfiguracoes from './pages/admin/AdminConfiguracoes';
 import SearchPage from './pages/SearchPage';
 import AgendamentoPage from './pages/AgendamentoPage';
 import Login from './pages/admin/Login';
+import AdminNFePage from './pages/admin/AdminNFePage';
 
 
-// Importa o AuthProvider e PrivateRoute
 import { AuthProvider } from './AuthContext';
 import PrivateRoute from './PrivateRoute';
 
@@ -24,60 +24,71 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          {/* Rotas públicas */}
-          <Route path="/" element={<HomeScreen />} />
-          <Route path="/cardapio" element={<CardapioPage />} />
-          <Route path="/sacola" element={<BagPage />} />
-          <Route path="/info" element={<InfoPage />} />
-          <Route path="/individual/:id" element={<ProdutoIndividual />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/agendar" element={<AgendamentoPage />} />
-          <Route path="/login" element={<Login />} />
+        <div className="App" style={{backgroundColor:'#F1F1F1'}}>
+          <main className="main-content" style={{backgroundColor:'#F2F2F2'}}>
+            <Routes>
+              {/* Rotas públicas */}
+              <Route path="/" element={<HomeScreen />} />
+              <Route path="/cardapio" element={<CardapioPage />} />
+              <Route path="/sacola" element={<BagPage />} />
+              <Route path="/info" element={<InfoPage />} />
+              <Route path="/individual/:id" element={<ProdutoIndividual />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/agendar" element={<AgendamentoPage />} />
+              <Route path="/login" element={<Login />} />
 
-          {/* Rotas protegidas por PrivateRoute */}
-          <Route
-            path="/admin"
-            element={
-              <PrivateRoute>
-                <AdminDashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/adminProducts"
-            element={
-              <PrivateRoute>
-                <AdminProducts />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/adminPedidos"
-            element={
-              <PrivateRoute>
-                <AdminPedidos />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/adminVendas"
-            element={
-              <PrivateRoute>
-                <AdminVendas />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/adminConfiguracoes"
-            element={
-              <PrivateRoute>
-                <AdminConfiguracoes />
-              </PrivateRoute>
-            }
-          />
-        </Routes>
-        <Footer />
+              {/* Rotas protegidas */}
+              <Route
+                path="/admin"
+                element={
+                  <PrivateRoute>
+                    <AdminDashboard />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/adminProducts"
+                element={
+                  <PrivateRoute>
+                    <AdminProducts />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/adminPedidos"
+                element={
+                  <PrivateRoute>
+                    <AdminPedidos />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/adminVendas"
+                element={
+                  <PrivateRoute>
+                    <AdminVendas />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/adminConfiguracoes"
+                element={
+                  <PrivateRoute>
+                    <AdminConfiguracoes />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                 path="/adminNFE"
+                element={
+                <PrivateRoute>
+                  <AdminNFePage />
+                </PrivateRoute>} />
+
+            </Routes>
+          </main>
+          <Footer />
+        </div>
       </Router>
     </AuthProvider>
   );

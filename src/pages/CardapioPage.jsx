@@ -1,7 +1,6 @@
 // src/pages/CardapioPage.jsx
 import React, { useEffect, useState } from "react";
-import { Container } from "@mui/material";
-import { Box } from "@mui/system";
+import { Container, Box, Typography } from "@mui/material";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import background from "../../src/img/Frame26095426.jpg";
@@ -19,7 +18,7 @@ function CardapioPage() {
   const [abertoGeral, setAbertoGeral] = useState(false);
 
   const capitalizar = (texto) => {
-    if (!texto) return '';
+    if (!texto) return "";
     return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
   };
 
@@ -30,12 +29,13 @@ function CardapioPage() {
   const fetchProdutos = async (categoria) => {
     try {
       let produtosRef = collection(db, "produtos");
-      let q = categoria === "todas"
-        ? produtosRef
-        : query(produtosRef, where("categoria", "==", capitalizar(categoria)));
+      let q =
+        categoria === "todas"
+          ? produtosRef
+          : query(produtosRef, where("categoria", "==", capitalizar(categoria)));
 
       const querySnapshot = await getDocs(q);
-      const produtosFormatados = querySnapshot.docs.map(doc => ({
+      const produtosFormatados = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
@@ -46,39 +46,52 @@ function CardapioPage() {
     }
   };
 
+  const fetchConfiguracoes = async () => {
+    try {
+      const configRef = collection(db, "configuracoes");
+      const querySnapshot = await getDocs(configRef);
+      const cfg = querySnapshot.docs[0]?.data() || {};
+      // tenta campos comuns: aberto / abertoGeral
+      const flag =
+        typeof cfg.aberto === "boolean"
+          ? cfg.aberto
+          : typeof cfg.abertoGeral === "boolean"
+          ? cfg.abertoGeral
+          : false;
+      setAbertoGeral(flag);
+    } catch (err) {
+      console.log("erro ao buscar configurações", err);
+    }
+  };
+
   useEffect(() => {
     fetchProdutos(categoriaSelecionada);
-
+    fetchConfiguracoes();
   }, [categoriaSelecionada]);
 
-useEffect(() => {
-  const sacola = JSON.parse(localStorage.getItem("sacola")) || [];
-  let quantity = 0;
+  useEffect(() => {
+    const sacola = JSON.parse(localStorage.getItem("sacola")) || [];
+    const quantity = sacola.reduce((acc, p) => acc + Number(p.quantity || 0), 0);
 
-  sacola.map(p => {
-    quantity += p.quantity;
-  });
-
-  console.log(quantity); // Debug: mostra valor real
-
-if (quantity > 0) {
-  setQuantidade(quantity);
-
-  const resumoPedido = document.getElementById("resumoPedido");
-  if (resumoPedido) resumoPedido.style.bottom = "0";
-} else {
-  const resumoPedido = document.getElementById("resumoPedido");
-  if (resumoPedido) resumoPedido.style.bottom = "-100%";
-}
-}, []);
+    if (quantity > 0) {
+      setQuantidade(quantity);
+      const resumoPedido = document.getElementById("resumoPedido");
+      if (resumoPedido) resumoPedido.style.bottom = "0";
+    } else {
+      const resumoPedido = document.getElementById("resumoPedido");
+      if (resumoPedido) resumoPedido.style.bottom = "-100%";
+    }
+  }, []);
 
   const handleAdicionarProduto = (produto) => {
     const sacola = JSON.parse(localStorage.getItem("sacola")) || [];
 
-    const tamanhoSelecionado =
-      produto.precos?.pequeno ? "pequeno"
-      : produto.precos?.medio ? "medio"
-      : produto.precos?.grande ? "grande"
+    const tamanhoSelecionado = produto.precos?.pequeno
+      ? "pequeno"
+      : produto.precos?.medio
+      ? "medio"
+      : produto.precos?.grande
+      ? "grande"
       : null;
 
     const preco = tamanhoSelecionado
@@ -114,81 +127,119 @@ if (quantity > 0) {
     if (resumoPedido) resumoPedido.style.bottom = "0";
   };
 
-  // ✅ MANTÉM A SACOLA PERSISTENTE mesmo após atualizar ou voltar para a página
+  // ✅ mantém a sacola persistente e corrige o listener de visibilidade
   useEffect(() => {
     const recalcularSacola = () => {
       const sacola = JSON.parse(localStorage.getItem("sacola")) || [];
-      const total = sacola.reduce((acc, p) => acc + p.quantity, 0);
+      const total = sacola.reduce((acc, p) => acc + Number(p.quantity || 0), 0);
       setQuantidade(total);
     };
 
-    recalcularSacola();
-
-    document.addEventListener("visibilitychange", () => {
+    const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         recalcularSacola();
       }
-    });
+    };
+
+    recalcularSacola();
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      document.removeEventListener("visibilitychange", recalcularSacola);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
   return (
     <Container
+      maxWidth="lg"
       sx={{
         display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
+        alignItems: "stretch",
         flexDirection: "column",
+        backgroundColor:'#F2F2F2',
+        px: { xs: 0, sm: 2, md: 3 },
       }}
     >
+      {/* HERO responsivo */}
       <Box
         sx={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          width: "100vw",
-          height: "200px",
+          width: "100%",
+          height: { xs: 200, md: 320 }, // ↑ aumenta no desktop
           backgroundImage: `url(${background})`,
           backgroundRepeat: "no-repeat",
           backgroundSize: "cover",
-          position: 'relative',
+          backgroundPosition: "center",
+          position: "relative",
+          borderRadius: { xs: 0, md: 2 },
+          overflow: "hidden",
         }}
       >
         <Box
           sx={{
-            position: 'absolute',
-            right: 10,
-            bottom: 10,
-            backgroundColor: '#fff',
-            color: abertoGeral ? '#00B856' : '#c00',
-            fontSize: '12px',
-            borderRadius: '5px',
-            padding: '2px 6px',
-            fontWeight: 'bold',
+            position: "absolute",
+            right: 12,
+            bottom: 12,
+            backgroundColor: "#fff",
+            color: abertoGeral ? "#00B856" : "#c00",
+            fontSize: "12px",
+            borderRadius: "6px",
+            px: 1,
+            py: 0.5,
+            fontWeight: "bold",
+            boxShadow: "0 2px 10px rgba(0,0,0,.08)",
           }}
         >
-          {abertoGeral ? '🟢 Aberto' : '🔴 Fechado'}
+          {abertoGeral ? "🟢 Aberto" : "🔴 Fechado"}
         </Box>
       </Box>
 
-      <ToolBar />
+      {/* Toolbar / Filtros */}
+      <Box sx={{ width: "100%", mt: { xs: 2, md: 3 } }}>
+        <ToolBar />
+      </Box>
 
-      <TabSelection onTabChange={setCategoriaSelecionada} />
+      {/* Tabs de categoria */}
+      <Box sx={{ width: "100%", mt: 1, mb: { xs: 1, md: 2 } }}>
+        <TabSelection onTabChange={setCategoriaSelecionada} />
+      </Box>
 
-      {produtos.map((produto) => (
-        <ProductCard
-          key={produto.id}
-          produto={produto}
-          onAdd={() => handleAdicionarProduto(produto)}
-          onView={() => handleAbrirDetalhe(produto.id)}
-        />
-      ))}
+      <Typography sx={{
+        fontWeight:600,
+        fontSize:'16px',
+        width:'fit-content',
+        paddingLeft:2,
+        paddingTop:1,
+        textTransform:'uppercase',
+      }}>{categoriaSelecionada}</Typography>
+      {/* GRID responsivo de produtos */}
+      <Box
+        sx={{
+          width: "100%",
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            md: "repeat(3, minmax(0, 1fr))",
+            lg: "repeat(4, minmax(0, 1fr))",
+          },
+          padding:2,
+          gap: { xs: 1, md: 3 },
+          pb: { xs: 14, md: 16 }, // espaço p/ não ficar sob o resumo fixo
+        }}
+      >
+        {produtos.map((produto) => (
+          <Box key={produto.id}>
+            <ProductCard
+              produto={produto}
+              onAdd={() => handleAdicionarProduto(produto)}
+              onView={() => handleAbrirDetalhe(produto.id)}
+            />
+          </Box>
+        ))}
+      </Box>
 
-    <ResumoPedido quantidade={quantidade} />
+      {/* Resumo fixo (já mobile-first) */}
+      <ResumoPedido quantidade={quantidade} />
     </Container>
   );
 }

@@ -1,28 +1,62 @@
+// src/componentes/footer.jsx (ou o caminho que você usa)
 import React from "react";
-import { Button, Container, Typography, Box } from "@mui/material";
+import { Box, Container, Typography, Link } from "@mui/material";
 
-function Footer({ title, description, price, onAdd }) {
+function Footer() {
+  const year = new Date().getFullYear();
+
   return (
-
-      <Box
+    <Box
+      component="footer"
+      sx={{
+        mt: { xs: 0, md: 8 },
+        px: 2,
+        py: 2,
+        pb: { xs: "calc(16px + env(safe-area-inset-bottom))", md: 3 },
+        bgcolor: "#fff",
+        borderTop: "1px solid #E5E7EB",
+        boxShadow: { xs: "0 -2px 10px rgba(0,0,0,0.04)", md: "0 -2px 12px rgba(0,0,0,0.06)" },
+      }}
+    >
+      <Container
+        maxWidth="lg"
         sx={{
           display: "flex",
-          flexDirection: "column", // Alinhar horizontalmente
-          justifyContent: "center",
+          flexDirection: { xs: "column", md: "row" },
           alignItems: "center",
-          width: "100%",
-          padding: "16px",
-          backgroundColor: "#fff",
-          boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+          justifyContent: "space-between",
+          gap: 0.5,
+          textAlign: { xs: "center", md: "left" },
         }}
       >
-            <Typography variant="h6" sx={{ color: "#484848", fontSize:"12px" }}>
-                Cardápio digital Cantina Reis 
-            </Typography>
-            <Typography variant="body2" sx={{ color: "#484848", marginTop: "1px", fontSize:"12px" }}>
-                Desenvolvido por <a style={{fontWeight:'600'}}>Arpex Technology</a>
-            </Typography>
-      </Box>
+        <Typography
+          variant="body2"
+          sx={{ color: "#484848", fontSize: { xs: 12, md: 13 } }}
+        >
+          © {year} Cardápio digital Cantina Reis
+        </Typography>
+
+        <Typography
+          variant="body2"
+          sx={{ color: "#484848", fontSize: { xs: 12, md: 13 } }}
+        >
+          Desenvolvido por{" "}
+          <Link
+            href="https://arpex.technology"
+            target="_blank"
+            rel="noopener"
+            underline="none"
+            sx={{
+              fontWeight: 700,
+              color: "#F75724",
+              "&:hover": { color: "#e64c1a", textDecoration: "underline" },
+            }}
+          >
+            Arpex Technology
+          </Link>
+        </Typography>
+      </Container>
+    </Box>
   );
 }
 
