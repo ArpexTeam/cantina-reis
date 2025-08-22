@@ -77,17 +77,6 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
         }
       }
 
-      // ---- Busca 1 produto para defaults fiscais da NF-e ----
-      const primeiroId = sacola[0].id;
-      const primeiroRef = doc(db, "produtos", primeiroId);
-      const primeiroSnap = await getDoc(primeiroRef);
-      if (!primeiroSnap.exists()) {
-        alert("Produto não encontrado no banco!");
-        setLoading(false);
-        return;
-      }
-      const produtoData = primeiroSnap.data();
-
       // ---- Transação: decrementa os estoques de TODOS os itens ----
       await runTransaction(db, async (transaction) => {
         for (const [id, qtd] of Object.entries(itensAgrupados)) {
@@ -102,82 +91,34 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
         }
       });
 
-      // ---- Monta itens para NF-e ----
-      const produtos = sacola.map((item) => ({
-        cProd: String(item.codigo || item.id || "001"),
-        cEAN: String(item.cEAN || "SEM GTIN"),
-        xProd: String(item.nome || "Produto"),
-        NCM: String(produtoData.ncm || "00000000"),
-        CFOP: String(produtoData.cfop || "5102"),
-        uCom: String(produtoData.unidade || "UN"),
-        qCom: Number(item.quantity ?? item.quantidade ?? 1),
-        vUnCom: Number(item.precoSelecionado ?? item.preco ?? 0),
-        cEANTrib: String(item.cEANTrib || "SEM GTIN"),
-        orig: Number(produtoData.origem ?? 0),
-        CST: String(produtoData.cst_icms ?? "00"),
-        pICMS: Number(produtoData.aliquota_icms ?? 18),
-        pPIS: Number(produtoData.aliquota_pis ?? 1.65),
-        pCOFINS: Number(produtoData.aliquota_cofins ?? 7.6),
-        cst_pis: String(produtoData.cst_pis ?? "01"),
-        cst_cofins: String(produtoData.cst_cofins ?? "01"),
-      }));
+      // ====== REMOVIDO: emissão de NF-e ======
+      // - Construção de itens fiscais
+      // - POST para emissor externo
+      // - Armazenamento de dados da NF-e no pedido
 
-      const dadosNFE = {
-        cliente: {
-          cpf: "12345678909",
-          nome: "Consumidor Final",
-          endereco: {
-            rua: "Rua Teste",
-            numero: "123",
-            bairro: "Centro",
-            cMun: "3550308",
-            cidade: "São Paulo",
-            UF: "SP",
-            CEP: "01001000",
-            fone: "11999999999",
-          },
-        },
-        produtos,
+      // ---- Salva pedido (sem NF-e) ----
+      const pedido = {
+        createdAt: serverTimestamp(),
+        itens: sacola,
+        status: "pendente",
+        tipoServico: servico,
+        total,
       };
 
-      // ---- Emite a NF-e ----
-      const resp = await fetch("https://nfe-emissor.onrender.com/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dadosNFE),
-      });
-      const nf = await resp.json();
-
-      if (nf.status !== "sucesso") {
-        // ROLLBACK do estoque se a NF falhar
+      try {
+        await addDoc(collection(db, "pedidos"), pedido);
+      } catch (err) {
+        // ROLLBACK do estoque se falhar ao salvar o pedido
         await runTransaction(db, async (transaction) => {
           for (const [id, qtd] of Object.entries(itensAgrupados)) {
             const ref = doc(db, "produtos", id);
             transaction.update(ref, { estoque: increment(qtd) });
           }
         });
-
-        console.error("Erro na emissão da NF-e:", nf?.mensagem || nf);
-        alert("Erro ao emitir NF-e!");
-        setLoading(false);
-        return;
+        throw err;
       }
 
-      // ---- Salva pedido com NF-e anexada ----
-      await addDoc(collection(db, "pedidos"), {
-        createdAt: serverTimestamp(),
-        itens: sacola,
-        status: "pendente",
-        tipoServico: servico,
-        total,
-        nfe: {
-          chave: nf.chave,
-          danfeBase64: nf.danfeBase64,
-          xmlBase64: nf.xmlBase64,
-        },
-      });
-
-      alert("Pedido salvo, estoque atualizado e NF-e emitida com sucesso!");
+      alert("Pedido salvo e estoque atualizado com sucesso!");
       localStorage.removeItem("sacola");
       navigate("/cardapio");
     } catch (error) {

@@ -7,12 +7,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBF_3hiDaZlQe7E2hzdz-6CoUqBXhTUBWA",
-  authDomain: "toricelli-a9f8f.firebaseapp.com",
-  projectId: "toricelli-a9f8f",
-  storageBucket: "toricelli-a9f8f.firebasestorage.app",
-  messagingSenderId: "741906615573",
-  appId: "1:741906615573:web:7991333505043b1b62ed1c"
+  apiKey: "AIzaSyCsYi--ojLnU_eAEXL2XRlznMYddzaaDWs",
+  authDomain: "cantina-reis.firebaseapp.com",
+  projectId: "cantina-reis",
+  storageBucket: "cantina-reis.firebasestorage.app",
+  messagingSenderId: "255895939750",
+  appId: "1:255895939750:web:207a871c2983f2bc742267"
 };
 
 // Initialize Firebase

@@ -1,3 +1,4 @@
+// src/componentes/admin/AddProductModal.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -9,7 +10,9 @@ import {
   IconButton,
   Button,
   Menu,
-  MenuItem
+  MenuItem,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -35,21 +38,12 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
   const [categoria, setCategoria] = useState('');
   const [categorias, setCategorias] = useState([]);
 
-  // Campos fiscais
-  const [codigo, setCodigo] = useState('');
-  const [ncm, setNcm] = useState('');
-  const [cfop, setCfop] = useState('');
-  const [cest, setCest] = useState('');
-  const [unidade, setUnidade] = useState('');
-  const [origem, setOrigem] = useState(0);
-  const [cst_icms, setCstIcms] = useState('');
-  const [aliquota_icms, setAliquotaIcms] = useState('');
-  const [cst_pis, setCstPis] = useState('');
-  const [aliquota_pis, setAliquotaPis] = useState('');
-  const [cst_cofins, setCstCofins] = useState('');
-  const [aliquota_cofins, setAliquotaCofins] = useState('');
-  const [cEAN, setCEAN] = useState('SEM GTIN');
-  const [cEANTrib, setCEANTrib] = useState('SEM GTIN');
+  // Config dinâmica (sem tamanhoObrigatorio)
+  const [config, setConfig] = useState({
+    habilitarTamanhos: false,
+    habilitarGuarnicoes: false,
+    maxGuarnicoes: 2,
+  });
 
   const [anchorElStatus, setAnchorElStatus] = useState(null);
   const openStatus = Boolean(anchorElStatus);
@@ -92,21 +86,11 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
     setGuarnicaoInput('');
     setAddingGuarnicao(false);
     setCategoria('');
-    // Fiscais
-    setCodigo('');
-    setNcm('');
-    setCfop('');
-    setCest('');
-    setUnidade('');
-    setOrigem(0);
-    setCstIcms('');
-    setAliquotaIcms('');
-    setCstPis('');
-    setAliquotaPis('');
-    setCstCofins('');
-    setAliquotaCofins('');
-    setCEAN('SEM GTIN');
-    setCEANTrib('SEM GTIN');
+    setConfig({
+      habilitarTamanhos: false,
+      habilitarGuarnicoes: false,
+      maxGuarnicoes: 2,
+    });
   };
 
   const handleImageSelect = (e) => {
@@ -172,33 +156,35 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         finalImageUrl = data.secure_url;
       }
 
+      // Preços conforme config: se não habilitar tamanhos, salva apenas "pequeno" (preço único)
+      const precosFinal = config.habilitarTamanhos
+        ? {
+            pequeno: precos.pequeno || '',
+            medio: precos.medio || '',
+            grande: precos.grande || '',
+          }
+        : { pequeno: precos.pequeno || '' };
+
+      // Guarnições conforme config
+      const guarnicoesFinal = config.habilitarGuarnicoes
+        ? Array.from(new Set(guarnicoes.map(g => String(g).trim()).filter(Boolean)))
+        : [];
+
       const novoProduto = {
         nome,
         descricao,
-        precos,
+        precos: precosFinal,
         status,
-        guarnicoes,
+        guarnicoes: guarnicoesFinal,
         estoque,
         estoqueMin: estoqueMinimo,
         imagem: finalImageUrl,
-        // 👇 Vincula categoria
         categoria: categoria || null,
-
-        // Fiscais
-        codigo,
-        ncm,
-        cfop,
-        cest,
-        unidade,
-        origem: Number(origem),
-        cst_icms,
-        aliquota_icms,
-        cst_pis,
-        aliquota_pis,
-        cst_cofins,
-        aliquota_cofins,
-        cEAN,
-        cEANTrib,
+        config: {
+          habilitarTamanhos: !!config.habilitarTamanhos,
+          habilitarGuarnicoes: !!config.habilitarGuarnicoes,
+          maxGuarnicoes: Number(config.maxGuarnicoes ?? 2),
+        },
       };
 
       const docRef = await addDoc(collection(db, 'produtos'), novoProduto);
@@ -218,15 +204,22 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
 
   return (
     <Modal open={open} onClose={onClose}>
-      <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 900, maxHeight: '90vh', bgcolor: '#F2F2F2', overflowY: 'auto', borderRadius: 2 }}>
+      <Box
+        sx={{
+          position: 'absolute', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '90%', maxWidth: 900, maxHeight: '90vh',
+          bgcolor: '#F2F2F2', overflowY: 'auto', borderRadius: 2
+        }}
+      >
         <IconButton onClick={onClose} sx={{ position: 'absolute', top: 16, right: 16 }}>
           <CloseIcon />
         </IconButton>
 
         <Paper sx={{ p:1, pl: 3, mb: 0.2, width:'100%' }}>
-        <Typography variant="h6" fontWeight="bold" mb={2} mt={2}>
-          Adicionar novo produto
-        </Typography>
+          <Typography variant="h6" fontWeight="bold" mb={2} mt={2}>
+            Adicionar novo produto
+          </Typography>
         </Paper>
 
         {/* Imagem e Nome */}
@@ -288,10 +281,46 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
                 multiline
                 rows={4}
                 value={descricao}
-       
                 onChange={(e) => setDescricao(e.target.value)}
               />
             </Grid>
+          </Box>
+        </Paper>
+
+        {/* Configurações dinâmicas */}
+        <Paper sx={{ p: 3, mb: 1 }}>
+          <Typography fontWeight={600} fontSize={16} mb={1.5}>Configurações do produto</Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={config.habilitarTamanhos}
+                  onChange={(_, checked) => setConfig(c => ({ ...c, habilitarTamanhos: checked }))}
+                />
+              }
+              label="Habilitar tamanhos (P/M/G)"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={config.habilitarGuarnicoes}
+                  onChange={(_, checked) => setConfig(c => ({ ...c, habilitarGuarnicoes: checked }))}
+                />
+              }
+              label="Habilitar guarnições"
+            />
+
+            <TextField
+              type="number"
+              label="Máx. guarnições"
+              size="small"
+              inputProps={{ min: 0 }}
+              value={config.maxGuarnicoes}
+              onChange={(e) => setConfig(c => ({ ...c, maxGuarnicoes: Math.max(0, Number(e.target.value || 0)) }))}
+              disabled={!config.habilitarGuarnicoes}
+            />
           </Box>
         </Paper>
 
@@ -316,43 +345,66 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
             </TextField>
           </Box>
 
-          {/* Preços */}
- <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-  {['pequeno', 'medio', 'grande'].map((size) => (
-    <TextField
-      key={size}
-      value={precos[size] || ''}
-      onChange={(e) => setPrecos({ ...precos, [size]: e.target.value })}
-      size="small"
-      variant="outlined"
-      placeholder="R$ 0,00"
-      InputProps={{
-        sx:{
-          padding:0,
-          height:"30px"
-        }
-      }}
-      InputLabelProps={{
-        shrink: true,            // 👈 mantém o label sempre acima
-        sx: {
-          position: 'relative',  // tira do posicionamento absoluto
-          transform: 'none',     // remove a transformação padrão
-          mb: 0.5,               // espaço entre label e input
-          fontSize: 12,
-          color: '#6B7280',
-          fontWeight: 500,
-        },
-      }}
-      label={`Preço ${size}`}
-      sx={{
-        width: 150,
-        '& .MuiOutlinedInput-root': { mt: 0.5 }, // compensa a altura do label
-        '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' }, // remove o notch
-      }}
-    />
-  ))}
-</Box>
-
+          {/* Preços (dinâmico) */}
+          {config.habilitarTamanhos ? (
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              {['pequeno', 'medio', 'grande'].map((size) => (
+                <TextField
+                  key={size}
+                  value={precos[size] || ''}
+                  onChange={(e) => setPrecos({ ...precos, [size]: e.target.value })}
+                  size="small"
+                  variant="outlined"
+                  placeholder="R$ 0,00"
+                  InputProps={{ sx:{ padding:0, height:"30px" } }}
+                  InputLabelProps={{
+                    shrink: true,
+                    sx: {
+                      position: 'relative',
+                      transform: 'none',
+                      mb: 0.5,
+                      fontSize: 12,
+                      color: '#6B7280',
+                      fontWeight: 500,
+                    },
+                  }}
+                  label={`Preço ${size}`}
+                  sx={{
+                    width: 150,
+                    '& .MuiOutlinedInput-root': { mt: 0.5 },
+                    '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+                  }}
+                />
+              ))}
+            </Box>
+          ) : (
+            <Box sx={{ maxWidth: 200 }}>
+              <TextField
+                value={precos.pequeno || ''}
+                onChange={(e) => setPrecos({ ...precos, pequeno: e.target.value })}
+                size="small"
+                variant="outlined"
+                placeholder="R$ 0,00"
+                InputProps={{ sx:{ padding:0, height:"30px" } }}
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    position: 'relative',
+                    transform: 'none',
+                    mb: 0.5,
+                    fontSize: 12,
+                    color: '#6B7280',
+                    fontWeight: 500,
+                  },
+                }}
+                label="Preço único"
+                sx={{
+                  '& .MuiOutlinedInput-root': { mt: 0.5 },
+                  '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+                }}
+              />
+            </Box>
+          )}
 
           {/* Status */}
           <Button
@@ -370,145 +422,131 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
           </Menu>
         </Paper>
 
-        {/* Guarnições */}
-        <Paper sx={{ p: 2, mb: 1 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-            <Box>
-              <Typography fontWeight={500} fontSize={16}>Adicionar Guarnições</Typography>
-              <Typography variant="body2" fontSize="12px" sx={{ color: '#6B7280' }}>Ingredientes, sabores, talheres...</Typography>
+        {/* Guarnições (só quando habilitado) */}
+        {config.habilitarGuarnicoes && (
+          <Paper sx={{ p: 2, mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Box>
+                <Typography fontWeight={500} fontSize={16}>Adicionar Guarnições</Typography>
+                <Typography variant="body2" fontSize="12px" sx={{ color: '#6B7280' }}>
+                  {`Cliente poderá escolher até ${config.maxGuarnicoes} opção(ões).`}
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                sx={{ minWidth: '32px', height: '42px', borderColor: '#F75724', color: '#F75724' }}
+                onClick={handleStartAddGuarnicao}
+              >
+                <AddIcon sx={{ fontSize: '20px' }} />
+              </Button>
             </Box>
-            <Button variant="outlined" sx={{ minWidth: '32px', height: '42px', borderColor: '#F75724', color: '#F75724' }} onClick={handleStartAddGuarnicao}>
-              <AddIcon sx={{ fontSize: '20px' }} />
-            </Button>
-          </Box>
-          {guarnicoes.map((item, i) => (
-            <Box key={i} sx={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #E5E7EB', py: 1, gap: 1 }}>
-              {editingGuarnicaoIndex === i ? (
-                <>
-                  <TextField size="small" value={guarnicaoInput} onChange={(e) => setGuarnicaoInput(e.target.value)} sx={{ flexGrow: 1 }} />
-                  <Button variant="contained" sx={{ bgcolor: '#00B856' }} onClick={handleSaveEditGuarnicao}>Salvar</Button>
-                  <Button variant="outlined" onClick={() => { setEditingGuarnicaoIndex(null); setGuarnicaoInput(''); }}>Cancelar</Button>
-                </>
-              ) : (
-                <>
-                  <Typography sx={{ flexGrow: 1 }}>{item}</Typography>
-                  <IconButton size="small" onClick={() => handleStartEditGuarnicao(i)}><EditIcon sx={{ fontSize: 18 }} /></IconButton>
-                  <IconButton size="small" onClick={() => handleRemoveGuarnicao(i)}><DeleteIcon sx={{ fontSize: 20, color: '#9B1C1C' }} /></IconButton>
-                </>
-              )}
-            </Box>
-          ))}
-          {addingGuarnicao && (
-            <Box sx={{ display: 'flex', gap: 1, py: 1 }}>
-              <TextField size="small" value={guarnicaoInput} onChange={(e) => setGuarnicaoInput(e.target.value)} placeholder="Nova guarnição" sx={{ flexGrow: 1 }} />
-              <Button variant="contained" sx={{ bgcolor: '#F75724' }} onClick={handleSaveAddGuarnicao}>Salvar</Button>
-              <Button variant="outlined" onClick={() => { setAddingGuarnicao(false); setGuarnicaoInput(''); }}>Cancelar</Button>
-            </Box>
-          )}
-        </Paper>
+
+            {guarnicoes.map((item, i) => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #E5E7EB', py: 1, gap: 1 }}>
+                {editingGuarnicaoIndex === i ? (
+                  <>
+                    <TextField size="small" value={guarnicaoInput} onChange={(e) => setGuarnicaoInput(e.target.value)} sx={{ flexGrow: 1 }} />
+                    <Button variant="contained" sx={{ bgcolor: '#00B856' }} onClick={handleSaveEditGuarnicao}>Salvar</Button>
+                    <Button variant="outlined" onClick={() => { setEditingGuarnicaoIndex(null); setGuarnicaoInput(''); }}>Cancelar</Button>
+                  </>
+                ) : (
+                  <>
+                    <Typography sx={{ flexGrow: 1 }}>{item}</Typography>
+                    <IconButton size="small" onClick={() => handleStartEditGuarnicao(i)}><EditIcon sx={{ fontSize: 18 }} /></IconButton>
+                    <IconButton size="small" onClick={() => handleRemoveGuarnicao(i)}><DeleteIcon sx={{ fontSize: 20, color: '#9B1C1C' }} /></IconButton>
+                  </>
+                )}
+              </Box>
+            ))}
+
+            {addingGuarnicao && (
+              <Box sx={{ display: 'flex', gap: 1, py: 1 }}>
+                <TextField size="small" value={guarnicaoInput} onChange={(e) => setGuarnicaoInput(e.target.value)} placeholder="Nova guarnição" sx={{ flexGrow: 1 }} />
+                <Button variant="contained" sx={{ bgcolor: '#F75724' }} onClick={handleSaveAddGuarnicao}>Salvar</Button>
+                <Button variant="outlined" onClick={() => { setAddingGuarnicao(false); setGuarnicaoInput(''); }}>Cancelar</Button>
+              </Box>
+            )}
+          </Paper>
+        )}
 
         {/* Estoque */}
- <Paper sx={{ p: 2, mb: 1 }}>
-  <Typography fontWeight={500} fontSize={16} mb={2}>
-    Controle de estoque
-  </Typography>
-
-  <Grid container spacing={2}>
-    <Grid item xs={6}>
-      <TextField
-        fullWidth
-        size="small"
-        variant="outlined"
-        label="Estoque"
-        value={estoque}
-        onChange={(e) => setEstoque(e.target.value)}
-        InputProps={{
-        sx:{
-          padding:0,
-          height:"30px"
-        }
-      }}
-        InputLabelProps={{
-          shrink: true,
-          sx: {
-            position: 'relative',
-            transform: 'none',
-            mb: 0.5,
-            fontSize: 12,
-            color: '#6B7280',
-            fontWeight: 600,
-          },
-        }}
-        sx={{
-          '& .MuiOutlinedInput-root': { mt: 0.5 },
-          '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
-        }}
-      />
-    </Grid>
-
-    <Grid item xs={6}>
-      <TextField
-        fullWidth
-        size="small"
-        variant="outlined"
-        label="Estoque mínimo"
-        value={estoqueMinimo}
-        onChange={(e) => setEstoqueMinimo(e.target.value)}
-        InputProps={{
-        sx:{
-          padding:0,
-          height:"30px"
-        }
-      }}
-        InputLabelProps={{
-          shrink: true,
-          sx: {
-            position: 'relative',
-            transform: 'none',
-            mb: 0.5,
-            fontSize: 12,
-            color: '#6B7280',
-            fontWeight: 600,
-          },
-        }}
-        sx={{
-          '& .MuiOutlinedInput-root': { mt: 0.5 },
-          '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
-        }}
-      />
-    </Grid>
-  </Grid>
-</Paper>
-
-
-        {/* Campos fiscais */}
         <Paper sx={{ p: 2, mb: 1 }}>
-          <Typography fontWeight={500} fontSize={16} mb={2}>Dados fiscais NF-e</Typography>
+          <Typography fontWeight={500} fontSize={16} mb={2}>
+            Controle de estoque
+          </Typography>
+
           <Grid container spacing={2}>
-            <Grid item xs={4}><TextField fullWidth size="small" label="Código" value={codigo} onChange={(e) => setCodigo(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="NCM" value={ncm} onChange={(e) => setNcm(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="CFOP" value={cfop} onChange={(e) => setCfop(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="CEST" value={cest} onChange={(e) => setCest(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="Unidade" value={unidade} onChange={(e) => setUnidade(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="Origem" value={origem} onChange={(e) => setOrigem(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="CST ICMS" value={cst_icms} onChange={(e) => setCstIcms(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="Alíquota ICMS (%)" value={aliquota_icms} onChange={(e) => setAliquotaIcms(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="CST PIS" value={cst_pis} onChange={(e) => setCstPis(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="Alíquota PIS (%)" value={aliquota_pis} onChange={(e) => setAliquotaPis(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="CST COFINS" value={cst_cofins} onChange={(e) => setCstCofins(e.target.value)} /></Grid>
-            <Grid item xs={4}><TextField fullWidth size="small" label="Alíquota COFINS (%)" value={aliquota_cofins} onChange={(e) => setAliquotaCofins(e.target.value)} /></Grid>
-            <Grid item xs={6}><TextField fullWidth size="small" label="cEAN" value={cEAN} onChange={(e) => setCEAN(e.target.value)} /></Grid>
-            <Grid item xs={6}><TextField fullWidth size="small" label="cEANTrib" value={cEANTrib} onChange={(e) => setCEANTrib(e.target.value)} /></Grid>
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                size="small"
+                variant="outlined"
+                label="Estoque"
+                value={estoque}
+                onChange={(e) => setEstoque(e.target.value)}
+                InputProps={{ sx:{ padding:0, height:"30px" } }}
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    position: 'relative',
+                    transform: 'none',
+                    mb: 0.5,
+                    fontSize: 12,
+                    color: '#6B7280',
+                    fontWeight: 600,
+                  },
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': { mt: 0.5 },
+                  '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+                }}
+              />
+            </Grid>
+
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                size="small"
+                variant="outlined"
+                label="Estoque mínimo"
+                value={estoqueMinimo}
+                onChange={(e) => setEstoqueMinimo(e.target.value)}
+                InputProps={{ sx:{ padding:0, height:"30px" } }}
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    position: 'relative',
+                    transform: 'none',
+                    mb: 0.5,
+                    fontSize: 12,
+                    color: '#6B7280',
+                    fontWeight: 600,
+                  },
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': { mt: 0.5 },
+                  '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+                }}
+              />
+            </Grid>
           </Grid>
         </Paper>
 
         <Paper sx={{ p: 2, display:'flex', justifyContent:'center', gap:2 }}>
-        <Button variant="contained" sx={{ textTransform:'capitalize', fontFamily: "Poppins, sans-serif", fontWeight:500, fontSize:14, mt: 3, bgcolor: '#F75724', py:1, px:5 }} onClick={handleSalvar}>
-          Confirmar
-        </Button>
-          <Button variant="contained" sx={{textTransform:'capitalize', fontFamily: "Poppins, sans-serif", fontWeight:500, fontSize:14, mt: 3, border:'2px solid #F75724', color:'#F75724', bgcolor:'transparent', py:1, px:5 }} onClick={onClose}>
-          Cancelar
-        </Button>
+          <Button
+            variant="contained"
+            sx={{ textTransform:'capitalize', fontFamily: "Poppins, sans-serif", fontWeight:500, fontSize:14, mt: 3, bgcolor: '#F75724', py:1, px:5 }}
+            onClick={handleSalvar}
+          >
+            Confirmar
+          </Button>
+          <Button
+            variant="contained"
+            sx={{textTransform:'capitalize', fontFamily: "Poppins, sans-serif", fontWeight:500, fontSize:14, mt: 3, border:'2px solid #F75724', color:'#F75724', bgcolor:'transparent', py:1, px:5 }}
+            onClick={onClose}
+          >
+            Cancelar
+          </Button>
         </Paper>
       </Box>
     </Modal>

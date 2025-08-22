@@ -14,6 +14,7 @@ import {
   FormControl,
   FormControlLabel,
   Radio,
+  Checkbox,
   CircularProgress,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -50,7 +51,34 @@ const ProdutoIndividual = () => {
         const docRef = doc(db, 'produtos', id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setProduto(docSnap.data());
+          const p = docSnap.data() || {};
+          // garante config com defaults
+          const cfg = p.config || {};
+          const precos = p.precos || {};
+          const keys = Object.keys(precos || {});
+          const hasSizes =
+            cfg.habilitarTamanhos ?? (Array.isArray(keys) && keys.length > 1);
+
+          // tamanho padrão quando houver tamanhos
+          if (hasSizes) {
+            const prefer = keys.includes('pequeno') ? 'pequeno' : keys[0];
+            setTamanhoSelecionado(prefer);
+          } else {
+            // sem tamanhos, usamos "pequeno" como preço único
+            setTamanhoSelecionado('pequeno');
+          }
+
+          // zera seleção de guarnições ao abrir
+          setGuarnicoesSelecionadas([]);
+
+          setProduto({
+            ...p,
+            config: {
+              habilitarTamanhos: !!(cfg.habilitarTamanhos ?? (keys.length > 1)),
+              habilitarGuarnicoes: !!(cfg.habilitarGuarnicoes ?? (Array.isArray(p.guarnicoes) && p.guarnicoes.length > 0)),
+              maxGuarnicoes: Number(cfg.maxGuarnicoes ?? 2),
+            },
+          });
         }
       } catch (error) {
         console.error('Erro ao buscar produto:', error);
@@ -59,8 +87,8 @@ const ProdutoIndividual = () => {
 
     fetchProduto();
 
-    // inicia quantidade da sacola (corrigido para quantity)
-    const sacola = JSON.parse(localStorage.getItem('sacola')) || [];
+    // inicia quantidade da sacola (usando 'quantity')
+    const sacola = JSON.parse(localStorage.getItem('sacola') || '[]');
     const total = sacola.reduce((acc, p) => acc + Number(p.quantity || 0), 0);
     setQuantidadeSacola(total);
   }, [id]);
@@ -73,36 +101,68 @@ const ProdutoIndividual = () => {
     );
   }
 
-  const preco = parseFloat(produto.precos?.[tamanhoSelecionado] || 0);
+  const hasSizes = !!produto.config?.habilitarTamanhos;
+  const hasAddons = !!produto.config?.habilitarGuarnicoes;
+  const maxGuarnicoes = Number(produto.config?.maxGuarnicoes ?? 2);
+
+  // Preço atual (dinâmico)
+  const preco = parseFloat(
+    hasSizes
+      ? produto.precos?.[tamanhoSelecionado] ?? 0
+      : produto.precos?.pequeno ?? 0 // preço único
+  ) || 0;
+
+  const sizeEntries = Object.entries(produto.precos || {});
+  // ordena tamanhos no padrão P/M/G quando existirem
+  const orderedSizeKeys = ['pequeno', 'medio', 'grande'].filter((k) =>
+    (produto.precos || {})[k] !== undefined
+  );
+  const otherKeys = sizeEntries
+    .map(([k]) => k)
+    .filter((k) => !orderedSizeKeys.includes(k));
+  const sizeKeys = [...orderedSizeKeys, ...otherKeys];
 
   const handleSelecionarGuarnicao = (opcao) => {
-    if (guarnicoesSelecionadas.includes(opcao)) {
+    const jaSelecionado = guarnicoesSelecionadas.includes(opcao);
+    if (jaSelecionado) {
       setGuarnicoesSelecionadas((prev) => prev.filter((g) => g !== opcao));
-    } else if (guarnicoesSelecionadas.length < 2) {
+    } else {
+      // respeita o limite
+      if (maxGuarnicoes > 0 && guarnicoesSelecionadas.length >= maxGuarnicoes) {
+        return; // opcional: alert('Limite atingido');
+      }
       setGuarnicoesSelecionadas((prev) => [...prev, opcao]);
     }
   };
 
   const handleAdicionarNaSacola = () => {
-    const sacola = JSON.parse(localStorage.getItem('sacola')) || [];
+    const sacola = JSON.parse(localStorage.getItem('sacola') || '[]');
 
-    // usa o id da URL, não produto.id
+    // usa o id da URL
     const existente = sacola.find(
-      (p) => p.id === id && p.tamanho === tamanhoSelecionado
+      (p) => p.id === id && p.tamanho === (hasSizes ? tamanhoSelecionado : 'pequeno')
     );
+
+    const itemBase = {
+      id,
+      nome: produto.nome,
+      descricao: produto.descricao,
+      imagem: produto.imagem,
+      tamanho: hasSizes ? tamanhoSelecionado : 'pequeno', // para preço único
+      precoSelecionado: preco,
+      guarnicoes: guarnicoesSelecionadas,
+      observacao: observacao.trim(),
+    };
 
     if (existente) {
       existente.quantity += quantidade;
+      // mantém demais campos atualizados (preço/obs/guarnições podem ter mudado)
+      existente.precoSelecionado = preco;
+      existente.guarnicoes = guarnicoesSelecionadas;
+      existente.observacao = observacao.trim();
     } else {
       sacola.push({
-        id, // 🔑 garante ID do produto
-        nome: produto.nome,
-        descricao: produto.descricao,
-        imagem: produto.imagem,
-        tamanho: tamanhoSelecionado,
-        precoSelecionado: preco, // ⚡ salva preço atual!
-        guarnicoes: guarnicoesSelecionadas,
-        observacao: observacao.trim(),
+        ...itemBase,
         quantity: quantidade,
       });
     }
@@ -144,7 +204,7 @@ const ProdutoIndividual = () => {
           boxShadow: { xs: 'none', md: '0 2px 12px rgba(0,0,0,0.06)' },
         }}
       >
-        {/* Grid responsivo: imagem à esquerda, detalhes à direita no desktop */}
+        {/* Grid responsivo */}
         <Box
           sx={{
             display: 'grid',
@@ -181,7 +241,7 @@ const ProdutoIndividual = () => {
           </Box>
 
           {/* Detalhes */}
-          <Box sx={{ p: { xs: 2, md: 3 }, pb: { xs: 14, md: 16 }, textAlign:'left' }}>
+          <Box sx={{ p: { xs: 2, md: 3 }, pb: { xs: 14, md: 16 }, textAlign: 'left' }}>
             <Typography
               fontSize={{ xs: 24, md: 26 }}
               fontWeight={600}
@@ -205,95 +265,98 @@ const ProdutoIndividual = () => {
               </span>
             </Typography>
 
-            {/* Tamanho */}
-            <Accordion
-              disableGutters
-              sx={{ boxShadow: 'none', borderTop: '2px solid #D9D9D9'}}
-            >
-              <AccordionSummary sx={{padding:0}} expandIcon={<ExpandMoreIcon />}>
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography fontWeight={600} fontSize={16}>Escolha uma opção</Typography>
-                </Box>
-                <Box
-                  sx={{
-                    backgroundColor: '#FF9F0A',
-                    px: 2,
-                    py:'3px',
-                    borderRadius: 1,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: 'black',
-                    height: 'fit-content',
-                  }}
-                >
-                  Obrigatório
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails sx={{padding:0,}}>
-                <FormControl>
-                  {Object.entries(produto.precos || {}).map(([key, value]) => (
+            {/* Tamanhos (só quando habilitado) */}
+            {hasSizes && sizeKeys.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: 'none', borderTop: '2px solid #D9D9D9' }}>
+                <AccordionSummary sx={{ padding: 0 }} expandIcon={<ExpandMoreIcon />}>
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Typography fontWeight={600} fontSize={16}>Escolha uma opção</Typography>
+                  </Box>
+                  {/* Chip "Obrigatório" apenas informativo: já deixamos um tamanho pré-selecionado */}
+                  <Box
+                    sx={{
+                      backgroundColor: '#FF9F0A',
+                      px: 2,
+                      py: '3px',
+                      borderRadius: 1,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: 'black',
+                      height: 'fit-content',
+                    }}
+                  >
+                    Obrigatório
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ padding: 0 }}>
+                  <FormControl>
+                    {sizeKeys.map((key) => {
+                      const valor = parseFloat(produto.precos?.[key] ?? 0) || 0;
+                      const label =
+                        key.charAt(0).toUpperCase() + key.slice(1).replace('medio', 'médio');
+                      return (
+                        <FormControlLabel
+                          key={key}
+                          value={key}
+                          control={
+                            <Radio
+                              checked={tamanhoSelecionado === key}
+                              onChange={(e) => setTamanhoSelecionado(e.target.value)}
+                              sx={{
+                                color: '#F75724',
+                                '&.Mui-checked': { color: '#F75724' },
+                              }}
+                            />
+                          }
+                          label={`${label} - R$ ${valor.toFixed(2).replace('.', ',')}`}
+                          sx={{ mr: 0.5 }}
+                        />
+                      );
+                    })}
+                  </FormControl>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Guarnições (dinâmico) */}
+            {hasAddons && Array.isArray(produto.guarnicoes) && produto.guarnicoes.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: 'none' }}>
+                <AccordionSummary sx={{ padding: 0 }} expandIcon={<ExpandMoreIcon />}>
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Typography fontWeight="bold">Guarnições</Typography>
+                    <Typography variant="caption" sx={{ display: 'block' }}>
+                      {`Selecione até ${maxGuarnicoes} opção(ões)`}
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ padding: 0 }}>
+                  {(produto.guarnicoes || []).map((opcao, index) => (
                     <FormControlLabel
-                      key={key}
-                      value={key}
+                      key={index}
                       control={
-                        <Radio
-                          checked={tamanhoSelecionado === key}
-                          onChange={(e) => setTamanhoSelecionado(e.target.value)}
+                        <Checkbox
+                          checked={guarnicoesSelecionadas.includes(opcao)}
+                          onChange={() => handleSelecionarGuarnicao(opcao)}
                           sx={{
                             color: '#F75724',
                             '&.Mui-checked': { color: '#F75724' },
                           }}
                         />
                       }
-                      label={`${key.charAt(0).toUpperCase() + key.slice(1)} - R$ ${parseFloat(
-                        value
-                      )
-                        .toFixed(2)
-                        .replace('.', ',')}`}
-                      sx={{ mr: 0.5 }}
+                      label={opcao}
+                      sx={{ mr: 1 }}
                     />
                   ))}
-                </FormControl>
-              </AccordionDetails>
-            </Accordion>
-
-            {/* Guarnições (até 2) */}
-            <Accordion disableGutters sx={{ boxShadow: 'none' }}>
-              <AccordionSummary sx={{padding:0,}} expandIcon={<ExpandMoreIcon />}>
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography fontWeight="bold">Guarnições</Typography>
-                  <Typography variant="caption" sx={{ display: 'block' }}>
-                    Selecione até 2 opções
-                  </Typography>
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails sx={{padding:0,}}>
-                {(produto.guarnicoes || []).map((opcao, index) => (
-                  <FormControlLabel
-                    key={index}
-                    control={
-                      <Radio
-                        checked={guarnicoesSelecionadas.includes(opcao)}
-                        onChange={() => handleSelecionarGuarnicao(opcao)}
-                        sx={{
-                          color: '#F75724',
-                          '&.Mui-checked': { color: '#F75724' },
-                        }}
-                      />
-                    }
-                    label={opcao}
-                    sx={{ mr: 1 }}
-                  />
-                ))}
-              </AccordionDetails>
-            </Accordion>
+                </AccordionDetails>
+              </Accordion>
+            )}
 
             {/* Observações */}
             <Accordion disableGutters sx={{ boxShadow: 'none' }}>
-              <AccordionSummary sx={{padding:0,}} expandIcon={<ExpandMoreIcon />}>
+              <AccordionSummary sx={{ padding: 0 }} expandIcon={<ExpandMoreIcon />}>
                 <Typography fontWeight="bold">Observações</Typography>
               </AccordionSummary>
-              <AccordionDetails sx={{padding:0,}}>
+              <AccordionDetails sx={{ padding: 0 }}>
                 <TextField
                   fullWidth
                   multiline

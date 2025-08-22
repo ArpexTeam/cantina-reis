@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Avatar, Paper, Table, TableHead, TableBody, TableRow, TableCell,
-  Button, TextField, MenuItem, Menu, IconButton, Stack
+  Button, TextField, MenuItem, Menu, Stack
 } from '@mui/material';
 import Sidebar from '../../componentes/admin/sidebar';
 import { collection, getDocs, query, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
@@ -100,7 +100,7 @@ export default function AdminPedidos() {
     );
   });
 
-  const totalPages = Math.ceil(pedidosFiltrados.length / itemsPerPage);
+  const totalPages = Math.ceil(pedidosFiltrados.length / itemsPerPage) || 1;
   const pedidosExibidos = pedidosFiltrados.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
@@ -121,9 +121,9 @@ export default function AdminPedidos() {
             <img src={logo} alt="Logo" style={{ height: '100%' }} />
           </Box>
           <Stack direction="row" spacing={2} alignItems="center" flexWrap="nowrap">
-          <Avatar src="https://via.placeholder.com/150" />
-          <Typography component="span">Administrador</Typography>
-        </Stack>
+            <Avatar src="https://via.placeholder.com/150" />
+            <Typography component="span">Administrador</Typography>
+          </Stack>
         </Box>
 
         <Box sx={{ p: 4, mt: 10 }}>
@@ -230,63 +230,37 @@ export default function AdminPedidos() {
                           fontSize: '12px',
                           py: 0.5,
                           px: 1.5,
-                             '&:hover': {
-                              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
-                              transform: 'translateY(-1px)',
-                            },
+                          '&:hover': {
+                            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                            transform: 'translateY(-1px)',
+                          },
                         }}
                       >
                         Aprovar
                       </Button>
-             <Button
-  onClick={() => handleStatusChange(pedido.id, 'cancelado')}
-  size="small"
-  variant="contained"
-  sx={{
-    bgcolor: '#EF4444',
-    color: '#fff',
-    textTransform: 'none',
-    fontSize: '12px',
-    py: 0.5,
-    px: 1.5,
-    mr: 1,
-    '&:hover': {
-    boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
-    transform: 'translateY(-1px)',
-  },
-  }}
->
-  Cancelar
-</Button>
 
-<Button
-  size="small"
-  variant="outlined"
-  sx={{
-    borderColor: '#3B82F6',
-    color: '#3B82F6',
-    textTransform: 'none',
-    fontSize: '12px',
-    py: 0.5,
-    px: 1.5
-  }}
-  onClick={() => {
-    if (!pedido?.nfe?.danfeBase64) {
-      alert("DANFE não encontrado para este pedido.");
-      return;
-    }
-    const byteCharacters = atob(pedido.nfe.danfeBase64);
-    const byteNumbers = new Array(byteCharacters.length)
-      .fill()
-      .map((_, i) => byteCharacters.charCodeAt(i));
-    const byteArray = new Uint8Array(byteNumbers);
-    const file = new Blob([byteArray], { type: 'application/pdf' });
-    const fileURL = URL.createObjectURL(file);
-    window.open(fileURL, '_blank');
-  }}
->
-  Ver DANFE
-</Button>
+                      <Button
+                        onClick={() => handleStatusChange(pedido.id, 'cancelado')}
+                        size="small"
+                        variant="contained"
+                        sx={{
+                          bgcolor: '#EF4444',
+                          color: '#fff',
+                          textTransform: 'none',
+                          fontSize: '12px',
+                          py: 0.5,
+                          px: 1.5,
+                          mr: 1,
+                          '&:hover': {
+                            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                            transform: 'translateY(-1px)',
+                          },
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+
+                      {/* ❌ Removido: botão "Ver DANFE" e qualquer leitura de pedido.nfe */}
                     </TableCell>
                   </TableRow>
                 ))}
