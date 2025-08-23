@@ -9,6 +9,10 @@ import {
   Avatar,
   IconButton,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Radio,
   RadioGroup,
   FormControlLabel,
@@ -21,6 +25,7 @@ import { db } from "../../firebase";
 import logo from "../../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg";
 
 export default function AdminConfiguracoes() {
+  const [openModal, setOpenModal] = useState(false);
   const [abertoGeral, setAbertoGeral] = useState(true);
 
   const [diasSemana, setDiasSemana] = useState([
@@ -53,7 +58,13 @@ export default function AdminConfiguracoes() {
       abertoGeral,
       dias: diasSemana,
     });
-    alert("Configurações salvas com sucesso!");
+
+    // Exibe o modal após salvar as configurações
+    setOpenModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setOpenModal(false);  // Fecha o modal
   };
 
   const toggleDia = (idx) => {
@@ -99,12 +110,7 @@ export default function AdminConfiguracoes() {
           <Box sx={{ height: 70 }}>
             <img src={logo} alt="Logo" style={{ height: "100%" }} />
           </Box>
-          <Stack
-            direction="row"
-            spacing={2}
-            alignItems="center"
-            flexWrap="nowrap"
-          >
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="nowrap">
             <Avatar src="https://via.placeholder.com/150" />
             <Typography component="span">Administrador</Typography>
           </Stack>
@@ -215,29 +221,19 @@ export default function AdminConfiguracoes() {
 
               {/* Horários */}
               <Paper sx={{ p: 2 }}>
-                <Typography
-                  fontWeight={600}
-                  textAlign={"left"}
-                  fontSize={"16px"}
-                  mb={2}
-                >
+                <Typography fontWeight={600} textAlign={"left"} fontSize={"16px"} mb={2}>
                   Editar horários semanais
                 </Typography>
 
                 {diasSemana.map((dia, idx) => (
-                  <Box
-                    key={idx}
-                    sx={{ display: "flex", alignItems: "center", mb: 1 }}
-                  >
+                  <Box key={idx} sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                     <Checkbox
                       checked={dia.enabled}
                       onChange={() => toggleDia(idx)}
                       size="small"
                       sx={{ p: 0, mr: 1 }}
                     />
-                    <Typography sx={{ width: 100, fontSize: 14 }}>
-                      {dia.label}
-                    </Typography>
+                    <Typography sx={{ width: 100, fontSize: 14 }}>{dia.label}</Typography>
                     <TextField
                       size="small"
                       value={dia.start}
@@ -256,11 +252,7 @@ export default function AdminConfiguracoes() {
                   </Box>
                 ))}
 
-                <Button
-                  variant="contained"
-                  sx={{ mt: 2 }}
-                  onClick={salvarHorarios}
-                >
+                <Button variant="contained" sx={{ mt: 2 }} onClick={salvarHorarios}>
                   Salvar alterações
                 </Button>
               </Paper>
@@ -268,6 +260,18 @@ export default function AdminConfiguracoes() {
           </Box>
         </Box>
       </Box>
+
+      {/* Modal de Sucesso */}
+      <Dialog open={openModal} onClose={handleCloseModal}>
+        <DialogTitle sx={{width:"500px", height: 40 }}> As alterações foram salvas com sucesso! ✅</DialogTitle>
+        <DialogContent>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseModal} color="primary">
+            Fechar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
