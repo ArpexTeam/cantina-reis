@@ -23,7 +23,7 @@ export default function Sidebar() {
     <Box
       sx={{
         width: 240,
-        height: '100vh',
+        height: "100vh",
         bgcolor: '#fff',
         borderRight: '1px solid #E0E0E0',
         display: 'flex',

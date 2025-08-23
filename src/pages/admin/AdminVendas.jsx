@@ -60,7 +60,7 @@ export default function AdminVendas() {
     <Box sx={{ display: 'flex', height: '100vh', fontFamily: 'Poppins, sans-serif' }}>
       <Sidebar />
 
-      <Box sx={{ flexGrow: 1, bgcolor: '#F8F8F8' }}>
+      <Box sx={{ flexGrow: 1, bgcolor: '#F1F1F1', height: 700  }}>
         {/* Header COM FAIXA PRETA */}
         <Box
           sx={{
@@ -89,7 +89,7 @@ export default function AdminVendas() {
         </Box>
         </Box>
 
-        <Box sx={{ p: 4 }}>
+        <Box sx={{ p: 12 }}>
           {/* Título */}
           <Typography variant="h6" fontWeight="bold" textAlign="center">Página de vendas</Typography>
           <Box sx={{ borderBottom: '2px solid black', width: '100%', mt: 1, mb: 4 }} />

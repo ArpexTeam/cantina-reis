@@ -63,6 +63,7 @@ const BagItem = ({
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            
           }}
         >
           {nome}

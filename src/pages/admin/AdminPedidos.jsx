@@ -176,7 +176,7 @@ export default function AdminPedidos() {
           <Paper sx={{ overflow: 'hidden', borderRadius: 2 }}>
             <Table>
               <TableHead>
-                <TableRow sx={{ bgcolor: '#F5F5F5' }}>
+                <TableRow sx={{ bgcolor: '#F9FAFB' }}>
                   <TableCell sx={{ fontWeight: 600 }}>NOME</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>TELEFONE</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>ITENS</TableCell>
@@ -269,7 +269,7 @@ export default function AdminPedidos() {
           </Paper>
 
           {/* Paginação */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, display: "flex", justifyContent: "flex-end", marginRight: 2 }}>
             {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
               <Button
                 key={page}
