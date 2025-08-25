@@ -9,13 +9,15 @@ function Footer() {
     <Box
       component="footer"
       sx={{
-        mt: { xs: 0, md: 8 },
-        px: 2,
+        mt: { xs: "auto", md: "auto" },
+        px: 20,
         py: 2,
         pb: { xs: "calc(16px + env(safe-area-inset-bottom))", md: 3 },
         bgcolor: "#fff",
         borderTop: "1px solid #E5E7EB",
         boxShadow: { xs: "0 -2px 10px rgba(0,0,0,0.04)", md: "0 -2px 12px rgba(0,0,0,0.06)" },
+        paddingTop: 3,
+        mt: 10,
       }}
     >
       <Container
@@ -33,7 +35,7 @@ function Footer() {
           variant="body2"
           sx={{ color: "#484848", fontSize: { xs: 12, md: 13 } }}
         >
-          © {year} Cardápio digital Cantina Reis
+          © {year} Todos os direitos reservados | Cardápio Digital - Cantina Reis
         </Typography>
 
         <Typography
