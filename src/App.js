@@ -12,6 +12,7 @@ import AdminPedidos from './pages/admin/AdminPedidos';
 import AdminVendas from './pages/admin/AdminVendas';
 import AdminConfiguracoes from './pages/admin/AdminConfiguracoes';
 import SearchPage from './pages/SearchPage';
+import OrderNumberPage from './pages/OrderNumberPage';
 import AgendamentoPage from './pages/AgendamentoPage';
 import Login from './pages/admin/Login';
 import AdminNFePage from './pages/admin/AdminNFePage';
@@ -35,6 +36,7 @@ function App() {
               <Route path="/individual/:id" element={<ProdutoIndividual />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/agendar" element={<AgendamentoPage />} />
+              <Route path="/numero/:orderNumber" element={<OrderNumberPage />} />
               <Route path="/login" element={<Login />} />
 
               {/* Rotas protegidas */}

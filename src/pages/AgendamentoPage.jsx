@@ -10,6 +10,7 @@ import {
   InputAdornment,
   Paper,
   Grid,
+  Stack
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
@@ -21,53 +22,163 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
+// === CONFIG ===
+const API_URL = 'http://localhost:3001/api/checkout';
+
+// helpers
+const toCents = (v) => {
+  if (v == null) return 0;
+  if (typeof v === 'string') {
+    const s = v.replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? Math.round(n * 100) : 0;
+  }
+  if (typeof v === 'number') {
+    return Number.isInteger(v) && v >= 100 ? v : Math.round(v * 100);
+  }
+  return 0;
+};
+const genOrderNumber5 = () =>
+  (Math.floor(Math.random() * 36 ** 5).toString(36).toUpperCase()).padStart(5, '0').slice(-5);
+
+const mapSacolaToCieloItems = (sacola) =>
+  sacola.map((p) => ({
+    Name: p?.nome ?? p?.name ?? 'Produto',
+    Description: p?.descricao ?? p?.description ?? 'Item',
+    UnitPrice: toCents(p?.precoSelecionado ?? p?.preco ?? 0),
+    Quantity: Number(p?.quantity ?? p?.quantidade ?? 1),
+    Type: 'Asset',
+    Sku: String(p?.id ?? p?.sku ?? 'SKU'),
+    Weight: Number(p?.peso ?? 0),
+  }));
+
+const getCheckoutUrl = (resData) =>
+  resData?.CheckoutUrl ||
+  resData?.checkoutUrl ||
+  resData?.Settings?.CheckoutUrl ||
+  resData?.settings?.checkoutUrl;
+
 export default function AgendamentoPage() {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [mensagem, setMensagem] = useState('');
   const [dataHora, setDataHora] = useState('');
+  const [modoPagamento, setModoPagamento] = useState('No caixa'); // "No caixa" | "Online"
+
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSalvarAgendamento = async () => {
     try {
-      const sacola = JSON.parse(localStorage.getItem('sacola')) || [];
+      if (loading) return;
+      setLoading(true);
 
+      const sacola = JSON.parse(localStorage.getItem('sacola') || '[]');
       const itens = sacola.map((item) => ({
-        produtoId: item.id || '',
+        id: item.id || '',
         nome: item.nome || '',
-        quantidade: item.quantity || 1,
-        preco: item.precoSelecionado ?? item.preco ?? 0,
+        quantidade: Number(item.quantity || 1),
+        preco: Number(item.precoSelecionado ?? item.preco ?? 0),
         tamanho: item.tamanhoSelecionado ?? item.tamanho ?? '',
         guarnicoes: Array.isArray(item.guarnicoes) ? item.guarnicoes : [],
-        observacoes: item.observacao || '',
+        observacao: item.observacao || '',
       }));
-
-      const total = itens.reduce((acc, p) => acc + p.preco * p.quantidade, 0);
+      const total = itens.reduce((acc, p) => acc + Number(p.preco) * Number(p.quantidade), 0);
 
       if (!nome || !telefone || !dataHora) {
         alert('Preencha todos os campos obrigatórios!');
+        setLoading(false);
         return;
       }
 
-      await addDoc(collection(db, 'pedidos'), {
+      const orderNumber = genOrderNumber5();
+      const [dataAgendamento, horaAgendamento] = dataHora.split('T');
+
+      if (modoPagamento === 'No caixa') {
+        // cria o pedido pendente agora (sem Cielo)
+        await addDoc(collection(db, 'pedidos'), {
+          createdAt: serverTimestamp(),
+          itens,
+          status: 'pendente',
+          tipoServico: 'Agendamento',
+          total,
+          nome,
+          telefone,
+          dataAgendamento,
+          horaAgendamento,
+          observacoes: mensagem,
+          pagamento: {
+            provedor: 'offline',
+            orderNumber,
+          },
+        });
+
+        localStorage.removeItem('sacola');
+        navigate(`/numero/${orderNumber}`);
+        return;
+      }
+
+      // === Online (Cielo) ===
+      // 1) cria um intent (sem mexer em estoque)
+      await addDoc(collection(db, 'checkoutIntents'), {
         createdAt: serverTimestamp(),
+        orderNumber,
         itens,
-        status: 'pendente',
-        tipoServico: 'Agendamento',
         total,
-        nome,
-        telefone,
-        dataAgendamento: dataHora.split('T')[0],
-        horaAgendamento: dataHora.split('T')[1],
-        observacoes: mensagem,
+        status: 'iniciado',
+        tipoServico: 'Agendamento',
+        agendamento: { dataAgendamento, horaAgendamento },
+        cliente: { nome, telefone, observacoes: mensagem },
       });
 
-      alert('Pedido agendado com sucesso!');
+      // 2) chama backend -> Cielo
+      const payload = {
+        OrderNumber: orderNumber,
+        SoftDescriptor: 'CantinaReis',
+        Cart: {
+          Discount: { Type: 'Percent', Value: 0 },
+          Items: mapSacolaToCieloItems(sacola),
+        },
+        Shipping: { Type: 'WithoutShipping', Price: 0 },
+        // opcional:
+        Customer: {
+          FullName: nome || 'Cliente',
+          Phone: telefone || '',
+          Email: 'no-reply@cantinareis.com.br',
+          Identity: '00000000000',
+        },
+      };
+
+      // valida preços localmente
+      if (payload.Cart.Items.some((i) => !i.UnitPrice || i.UnitPrice < 1)) {
+        console.table(payload.Cart.Items.map((i) => ({
+          Name: i.Name, UnitPrice: i.UnitPrice, Quantity: i.Quantity
+        })));
+        throw new Error('Algum item está sem preço (centavos). Verifique "precoSelecionado" na sacola.');
+      }
+
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await res.text().catch(() => '');
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+      if (res.status !== 200 && res.status !== 201) {
+        throw new Error(`Checkout falhou (${res.status}). ${text || ''}`);
+      }
+
+      const checkoutUrl = getCheckoutUrl(data);
+      if (!checkoutUrl) throw new Error('CheckoutUrl não retornada pelo backend/Cielo.');
+
       localStorage.removeItem('sacola');
-      navigate('/cardapio');
+      window.location.href = checkoutUrl;
     } catch (error) {
-      console.error('Erro ao salvar pedido:', error);
-      alert('Erro ao salvar pedido. Tente novamente.');
+      console.error('Erro ao salvar/agendar:', error);
+      alert(error.message || 'Erro ao salvar pedido. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,7 +195,7 @@ export default function AgendamentoPage() {
         fontFamily: 'Poppins, sans-serif',
       }}
     >
-      {/* Cabeçalho (mobile-first) */}
+      {/* Cabeçalho */}
       <Paper
         elevation={0}
         sx={{
@@ -102,11 +213,7 @@ export default function AgendamentoPage() {
         <IconButton size="small" onClick={() => navigate(-1)} aria-label="Voltar">
           <ArrowBackIcon />
         </IconButton>
-        <Typography
-          fontWeight="bold"
-          variant="subtitle1"
-          sx={{ fontSize: { xs: 16, md: 18 } }}
-        >
+        <Typography fontWeight="bold" variant="subtitle1" sx={{ fontSize: { xs: 16, md: 18 } }}>
           Agendar
         </Typography>
         <IconButton size="small" onClick={() => navigate(-1)} aria-label="Fechar">
@@ -138,7 +245,7 @@ export default function AgendamentoPage() {
           }}
         >
           <Grid container spacing={2}>
-            {/* Nome e Telefone lado a lado no desktop */}
+            {/* Nome e Telefone */}
             <Grid item xs={12} md={6}>
               <Typography sx={{ mb: 0.5, fontSize: 14 }}>Nome</Typography>
               <TextField
@@ -175,9 +282,7 @@ export default function AgendamentoPage() {
 
             {/* Data/Hora */}
             <Grid item xs={12} md={6}>
-              <Typography sx={{ mb: 0.5, fontSize: 14 }}>
-                Selecione data e horário
-              </Typography>
+              <Typography sx={{ mb: 0.5, fontSize: 14 }}>Selecione data e horário</Typography>
               <TextField
                 fullWidth
                 type="datetime-local"
@@ -193,7 +298,7 @@ export default function AgendamentoPage() {
               />
             </Grid>
 
-            {/* Mensagem (ocupa largura toda) */}
+            {/* Observações */}
             <Grid item xs={12}>
               <Typography sx={{ mb: 0.5, fontSize: 14 }}>Envie uma mensagem</Typography>
               <TextField
@@ -206,17 +311,43 @@ export default function AgendamentoPage() {
               />
             </Grid>
 
-            {/* Botão: full no mobile, alinhado à direita no desktop */}
+            {/* Seletor de pagamento */}
             <Grid item xs={12}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: { xs: 'stretch', md: 'flex-end' },
-                }}
-              >
+              <Typography sx={{ mb: 1, fontSize: 14, fontWeight: 600 }}>
+                Como deseja pagar?
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                {['No caixa', 'Online'].map((opt) => (
+                  <Button
+                    key={opt}
+                    variant={modoPagamento === opt ? 'contained' : 'outlined'}
+                    onClick={() => setModoPagamento(opt)}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      borderRadius: 1,
+                      bgcolor: modoPagamento === opt ? '#F75724' : '#fff',
+                      color: modoPagamento === opt ? '#fff' : '#F75724',
+                      borderColor: '#F75724',
+                      '&:hover': {
+                        bgcolor: modoPagamento === opt ? '#e6491c' : '#FFF1EB',
+                        borderColor: '#e6491c',
+                      },
+                    }}
+                  >
+                    {opt}
+                  </Button>
+                ))}
+              </Stack>
+            </Grid>
+
+            {/* Botão confirmar */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', md: 'flex-end' } }}>
                 <Button
                   variant="contained"
                   onClick={handleSalvarAgendamento}
+                  disabled={loading}
                   sx={{
                     width: { xs: '100%', md: 'auto' },
                     px: { md: 3 },
@@ -229,7 +360,7 @@ export default function AgendamentoPage() {
                     '&:hover': { bgcolor: '#d44b1e' },
                   }}
                 >
-                  CONFIRMAR AGENDAMENTO
+                  {loading ? 'Processando...' : 'CONFIRMAR AGENDAMENTO'}
                 </Button>
               </Box>
             </Grid>
@@ -237,7 +368,6 @@ export default function AgendamentoPage() {
         </Paper>
       </Box>
 
-      {/* Espaço inferior no mobile para evitar conflito com elementos fixos */}
       <Box sx={{ height: { xs: 16, md: 0 } }} />
     </Container>
   );

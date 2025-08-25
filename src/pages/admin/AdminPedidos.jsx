@@ -5,7 +5,10 @@ import {
   Button, TextField, MenuItem, Menu, Stack
 } from '@mui/material';
 import Sidebar from '../../componentes/admin/sidebar';
-import { collection, getDocs, query, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
+import {
+  collection, getDocs, query, where, Timestamp,
+  updateDoc, doc, getDoc, runTransaction
+} from 'firebase/firestore';
 import { db } from '../../firebase';
 import logo from '../../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg';
 import SearchIcon from '@mui/icons-material/Search';
@@ -27,17 +30,9 @@ export default function AdminPedidos() {
     const fetchPedidos = async () => {
       try {
         const cutoffDate = Timestamp.fromDate(new Date(Date.now() - dateFilter * 24 * 60 * 60 * 1000));
-
-        const q = query(
-          collection(db, 'pedidos'),
-          where('createdAt', '>=', cutoffDate)
-        );
-
+        const q = query(collection(db, 'pedidos'), where('createdAt', '>=', cutoffDate));
         const querySnapshot = await getDocs(q);
-        const pedidosData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const pedidosData = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
         setPedidos(pedidosData);
       } catch (error) {
         console.error('Erro ao buscar pedidos:', error);
@@ -56,36 +51,84 @@ export default function AdminPedidos() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'ativo': return '#DEF7EC';
-      case 'aprovado': return '#DEF7EC';
-      case 'cancelado': return '#FDE8E8';
-      case 'pendente': return '#FDF6B2';
-      default: return '#E0E0E0';
+      case 'ativo':
+      case 'aprovado':
+        return '#DEF7EC';
+      case 'cancelado':
+        return '#FDE8E8';
+      case 'pendente':
+        return '#FDF6B2';
+      default:
+        return '#E0E0E0';
     }
   };
-
   const getStatusFontColor = (status) => {
     switch (status) {
-      case 'ativo': return '#03543F';
-      case 'aprovado': return '#03543F';
-      case 'cancelado': return '#9B1C1C';
-      case 'pendente': return '#723B13';
-      default: return '#6B7280';
+      case 'ativo':
+      case 'aprovado':
+        return '#03543F';
+      case 'cancelado':
+        return '#9B1C1C';
+      case 'pendente':
+        return '#723B13';
+      default:
+        return '#6B7280';
     }
   };
 
+  // Aprova pedido + baixa estoque se for "No caixa" pendente
   const handleStatusChange = async (pedidoId, novoStatus) => {
     try {
+      const pedido = pedidos.find((p) => p.id === pedidoId);
+      if (!pedido) return;
+
+      // Caso especial: pendente + offline (pagar no caixa) => baixar estoque antes de aprovar
+      const isPendenteOffline =
+        pedido.status === 'pendente' &&
+        (pedido.pagamento?.provedor === 'offline' || pedido.tipoServico === 'No caixa');
+
+      if (novoStatus === 'aprovado' && isPendenteOffline) {
+        // Transação para baixar estoque de todos os itens
+        await runTransaction(db, async (transaction) => {
+          for (const item of (pedido.itens || [])) {
+            const prodId = item.id;
+            const qtd = Number(item.quantidade ?? item.quantity ?? 1);
+            if (!prodId || !qtd || qtd <= 0) continue;
+
+            const prodRef = doc(db, 'produtos', prodId);
+            const snap = await transaction.get(prodRef);
+            if (!snap.exists()) {
+              throw new Error(`Produto ${prodId} não encontrado.`);
+            }
+            const dados = snap.data();
+            const estoqueAtual = Number(dados?.estoque ?? 0);
+            if (estoqueAtual < qtd) {
+              throw new Error(`Estoque insuficiente para "${dados?.nome || prodId}". Disp.: ${estoqueAtual}, solic.: ${qtd}`);
+            }
+            transaction.update(prodRef, { estoque: estoqueAtual - qtd });
+          }
+
+          // Atualiza status do pedido dentro da transação
+          const pedidoRef = doc(db, 'pedidos', pedidoId);
+          transaction.update(pedidoRef, { status: 'aprovado' });
+        });
+
+        // Atualiza UI local
+        setPedidos((prev) =>
+          prev.map((p) => (p.id === pedidoId ? { ...p, status: 'aprovado' } : p))
+        );
+        return;
+      }
+
+      // Fluxo padrão (online já confirmado, ou mudar para cancelado, etc.)
       const pedidoRef = doc(db, 'pedidos', pedidoId);
       await updateDoc(pedidoRef, { status: novoStatus });
-
       setPedidos((prev) =>
-        prev.map((p) =>
-          p.id === pedidoId ? { ...p, status: novoStatus } : p
-        )
+        prev.map((p) => (p.id === pedidoId ? { ...p, status: novoStatus } : p))
       );
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
+      alert(error.message || 'Erro ao atualizar status do pedido.');
     }
   };
 
@@ -96,6 +139,7 @@ export default function AdminPedidos() {
       p.telefone?.toLowerCase().includes(t) ||
       p.status?.toLowerCase().includes(t) ||
       p.tipoServico?.toLowerCase().includes(t) ||
+      p.pagamento?.orderNumber?.toLowerCase?.()?.includes(t) ||
       p.itens?.some((item) => item.nome?.toLowerCase().includes(t))
     );
   });
@@ -177,6 +221,7 @@ export default function AdminPedidos() {
             <Table>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#F5F5F5' }}>
+                  <TableCell sx={{ fontWeight: 600 }}>Nº PEDIDO</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>NOME</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>TELEFONE</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>ITENS</TableCell>
@@ -187,83 +232,86 @@ export default function AdminPedidos() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {pedidosExibidos.map((pedido) => (
-                  <TableRow key={pedido.id}>
-                    <TableCell>{pedido.nome}</TableCell>
-                    <TableCell>{pedido.telefone}</TableCell>
-                    <TableCell>
-                      {pedido.itens?.map((item, idx) => (
-                        <Box key={idx}>
-                          {item.nome} x{item.quantidade}
+                {pedidosExibidos.map((pedido) => {
+                  const orderNumber = pedido.pagamento?.orderNumber || pedido.id;
+                  return (
+                    <TableRow key={pedido.id}>
+                      <TableCell sx={{ fontWeight: 700 }}>{orderNumber}</TableCell>
+                      <TableCell>{pedido.nome || '-'}</TableCell>
+                      <TableCell>{pedido.telefone || '-'}</TableCell>
+                      <TableCell>
+                        {pedido.itens?.map((item, idx) => (
+                          <Box key={idx}>
+                            {item.nome || item.Name} x{item.quantidade ?? item.quantity ?? 1}
+                          </Box>
+                        ))}
+                      </TableCell>
+                      <TableCell>R$ {(Number(pedido.total ?? 0)).toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Box sx={{
+                          display: 'inline-block',
+                          px: 1.5, py: 0.5,
+                          borderRadius: '4px',
+                          bgcolor: getStatusColor(pedido.status),
+                          color: getStatusFontColor(pedido.status),
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          textTransform: 'capitalize'
+                        }}>
+                          {pedido.status}
                         </Box>
-                      ))}
-                    </TableCell>
-                    <TableCell>R$ {pedido.total?.toFixed(2)}</TableCell>
-                    <TableCell>
-                      <Box sx={{
-                        display: 'inline-block',
-                        px: 1.5, py: 0.5,
-                        borderRadius: '4px',
-                        bgcolor: getStatusColor(pedido.status),
-                        color: getStatusFontColor(pedido.status),
-                        fontSize: '12px',
-                        fontWeight: 600,
-                      }}>
-                        {pedido.status}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      {pedido.createdAt
-                        ? format(pedido.createdAt.toDate(), 'dd/MM/yyyy')
-                        : '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        onClick={() => handleStatusChange(pedido.id, 'aprovado')}
-                        size="small"
-                        variant="contained"
-                        sx={{
-                          bgcolor: '#22C55E',
-                          color: '#fff',
-                          mr: 1,
-                          textTransform: 'none',
-                          fontSize: '12px',
-                          py: 0.5,
-                          px: 1.5,
-                          '&:hover': {
-                            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
-                            transform: 'translateY(-1px)',
-                          },
-                        }}
-                      >
-                        Aprovar
-                      </Button>
+                      </TableCell>
+                      <TableCell>
+                        {pedido.createdAt
+                          ? format(pedido.createdAt.toDate(), 'dd/MM/yyyy')
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          onClick={() => handleStatusChange(pedido.id, 'aprovado')}
+                          size="small"
+                          variant="contained"
+                          sx={{
+                            bgcolor: '#22C55E',
+                            color: '#fff',
+                            mr: 1,
+                            textTransform: 'none',
+                            fontSize: '12px',
+                            py: 0.5,
+                            px: 1.5,
+                            '&:hover': {
+                              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                              transform: 'translateY(-1px)',
+                            },
+                          }}
+                        >
+                          Aprovar
+                        </Button>
 
-                      <Button
-                        onClick={() => handleStatusChange(pedido.id, 'cancelado')}
-                        size="small"
-                        variant="contained"
-                        sx={{
-                          bgcolor: '#EF4444',
-                          color: '#fff',
-                          textTransform: 'none',
-                          fontSize: '12px',
-                          py: 0.5,
-                          px: 1.5,
-                          mr: 1,
-                          '&:hover': {
-                            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
-                            transform: 'translateY(-1px)',
-                          },
-                        }}
-                      >
-                        Cancelar
-                      </Button>
-
-                      {/* ❌ Removido: botão "Ver DANFE" e qualquer leitura de pedido.nfe */}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        <Button
+                          onClick={() => handleStatusChange(pedido.id, 'cancelado')}
+                          size="small"
+                          variant="contained"
+                          sx={{
+                            bgcolor: '#EF4444',
+                            color: '#fff',
+                            textTransform: 'none',
+                            fontSize: '12px',
+                            py: 0.5,
+                            px: 1.5,
+                            mr: 1,
+                            '&:hover': {
+                              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                              transform: 'translateY(-1px)',
+                            },
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </Paper>
