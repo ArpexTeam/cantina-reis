@@ -26,7 +26,7 @@ import { db } from '../../firebase';
 export default function AddProductModal({ open, onClose, onProdutoAdicionado }) {
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [precos, setPrecos] = useState({ pequeno: '', medio: '', grande: '' });
+  const [precos, setPrecos] = useState({ pequeno: '', medio: '', executivo: '' });
   const [status, setStatus] = useState('Disponível');
   const [guarnicoes, setGuarnicoes] = useState([]);
   const [estoque, setEstoque] = useState('');
@@ -75,7 +75,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
   const resetForm = () => {
     setNome('');
     setDescricao('');
-    setPrecos({ pequeno: '', medio: '', grande: '' });
+    setPrecos({ pequeno: '', medio: '', executivo: '' });
     setStatus('Disponível');
     setGuarnicoes([]);
     setEstoque('');
@@ -161,7 +161,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         ? {
             pequeno: precos.pequeno || '',
             medio: precos.medio || '',
-            grande: precos.grande || '',
+            executivo: precos.executivo || '',
           }
         : { pequeno: precos.pequeno || '' };
 
@@ -299,7 +299,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
                   onChange={(_, checked) => setConfig(c => ({ ...c, habilitarTamanhos: checked }))}
                 />
               }
-              label="Habilitar tamanhos (P/M/G)"
+              label="Habilitar tamanhos (P/M/E)"
             />
 
             <FormControlLabel
@@ -348,7 +348,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
           {/* Preços (dinâmico) */}
           {config.habilitarTamanhos ? (
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-              {['pequeno', 'medio', 'grande'].map((size) => (
+              {['pequeno', 'medio', 'executivo'].map((size) => (
                 <TextField
                   key={size}
                   value={precos[size] || ''}

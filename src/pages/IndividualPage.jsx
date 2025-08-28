@@ -1,4 +1,4 @@
-// src/pages/IndividualPage.jsx  (ou ProdutoIndividual.jsx se preferir)
+// src/pages/IndividualPage.jsx  (ProdutoIndividual.jsx se preferir)
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -52,30 +52,29 @@ const ProdutoIndividual = () => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const p = docSnap.data() || {};
-          // garante config com defaults
           const cfg = p.config || {};
           const precos = p.precos || {};
           const keys = Object.keys(precos || {});
           const hasSizes =
             cfg.habilitarTamanhos ?? (Array.isArray(keys) && keys.length > 1);
 
-          // tamanho padrão quando houver tamanhos
           if (hasSizes) {
             const prefer = keys.includes('pequeno') ? 'pequeno' : keys[0];
             setTamanhoSelecionado(prefer);
           } else {
-            // sem tamanhos, usamos "pequeno" como preço único
-            setTamanhoSelecionado('pequeno');
+            setTamanhoSelecionado('pequeno'); // preço único
           }
 
-          // zera seleção de guarnições ao abrir
           setGuarnicoesSelecionadas([]);
 
           setProduto({
             ...p,
             config: {
               habilitarTamanhos: !!(cfg.habilitarTamanhos ?? (keys.length > 1)),
-              habilitarGuarnicoes: !!(cfg.habilitarGuarnicoes ?? (Array.isArray(p.guarnicoes) && p.guarnicoes.length > 0)),
+              habilitarGuarnicoes: !!(
+                cfg.habilitarGuarnicoes ??
+                (Array.isArray(p.guarnicoes) && p.guarnicoes.length > 0)
+              ),
               maxGuarnicoes: Number(cfg.maxGuarnicoes ?? 2),
             },
           });
@@ -105,17 +104,28 @@ const ProdutoIndividual = () => {
   const hasAddons = !!produto.config?.habilitarGuarnicoes;
   const maxGuarnicoes = Number(produto.config?.maxGuarnicoes ?? 2);
 
-  // Preço atual (dinâmico)
-  const preco = parseFloat(
+  // helper: string BR ("R$ 1.234,56", "12,00") -> number
+  const toNumberBR = (v) => {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const s = v.replace(/R\$\s?/i, '').replace(/\./g, '').replace(',', '.');
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  };
+
+  // Preço atual (dinâmico) em reais
+  const preco = toNumberBR(
     hasSizes
       ? produto.precos?.[tamanhoSelecionado] ?? 0
-      : produto.precos?.pequeno ?? 0 // preço único
-  ) || 0;
+      : produto.precos?.pequeno ?? 0
+  );
+  const precoValido = preco > 0;
 
   const sizeEntries = Object.entries(produto.precos || {});
-  // ordena tamanhos no padrão P/M/G quando existirem
-  const orderedSizeKeys = ['pequeno', 'medio', 'grande'].filter((k) =>
-    (produto.precos || {})[k] !== undefined
+  const orderedSizeKeys = ['pequeno', 'medio', 'executivo'].filter(
+    (k) => (produto.precos || {})[k] !== undefined
   );
   const otherKeys = sizeEntries
     .map(([k]) => k)
@@ -123,24 +133,29 @@ const ProdutoIndividual = () => {
   const sizeKeys = [...orderedSizeKeys, ...otherKeys];
 
   const handleSelecionarGuarnicao = (opcao) => {
-    const jaSelecionado = guarnicoesSelecionadas.includes(opcao);
-    if (jaSelecionado) {
+    const ja = guarnicoesSelecionadas.includes(opcao);
+    if (ja) {
       setGuarnicoesSelecionadas((prev) => prev.filter((g) => g !== opcao));
     } else {
-      // respeita o limite
       if (maxGuarnicoes > 0 && guarnicoesSelecionadas.length >= maxGuarnicoes) {
-        return; // opcional: alert('Limite atingido');
+        return;
       }
       setGuarnicoesSelecionadas((prev) => [...prev, opcao]);
     }
   };
 
   const handleAdicionarNaSacola = () => {
+    if (!precoValido) {
+      alert('Este item está indisponível no momento.');
+      return;
+    }
+
     const sacola = JSON.parse(localStorage.getItem('sacola') || '[]');
 
-    // usa o id da URL
     const existente = sacola.find(
-      (p) => p.id === id && p.tamanho === (hasSizes ? tamanhoSelecionado : 'pequeno')
+      (p) =>
+        p.id === id &&
+        p.tamanho === (hasSizes ? tamanhoSelecionado : 'pequeno')
     );
 
     const itemBase = {
@@ -148,7 +163,7 @@ const ProdutoIndividual = () => {
       nome: produto.nome,
       descricao: produto.descricao,
       imagem: produto.imagem,
-      tamanho: hasSizes ? tamanhoSelecionado : 'pequeno', // para preço único
+      tamanho: hasSizes ? tamanhoSelecionado : 'pequeno',
       precoSelecionado: preco,
       guarnicoes: guarnicoesSelecionadas,
       observacao: observacao.trim(),
@@ -156,7 +171,6 @@ const ProdutoIndividual = () => {
 
     if (existente) {
       existente.quantity += quantidade;
-      // mantém demais campos atualizados (preço/obs/guarnições podem ter mudado)
       existente.precoSelecionado = preco;
       existente.guarnicoes = guarnicoesSelecionadas;
       existente.observacao = observacao.trim();
@@ -242,28 +256,22 @@ const ProdutoIndividual = () => {
 
           {/* Detalhes */}
           <Box sx={{ p: { xs: 2, md: 3 }, pb: { xs: 14, md: 16 }, textAlign: 'left' }}>
-            <Typography
-              fontSize={{ xs: 24, md: 26 }}
-              fontWeight={600}
-              sx={{ mb: 0.5 }}
-            >
+            <Typography fontSize={{ xs: 24, md: 26 }} fontWeight={600} sx={{ mb: 0.5 }}>
               {produto.nome}
             </Typography>
-            <Typography
-              color="text.secondary"
-              fontSize={{ xs: 16, md: 15 }}
-              fontWeight={300}
-              sx={{ mb: 1.5 }}
-            >
+            <Typography color="text.secondary" fontSize={{ xs: 16, md: 15 }} fontWeight={300} sx={{ mb: 1.5 }}>
               {produto.descricao}
             </Typography>
 
-            <Typography fontWeight={600} fontSize={20} sx={{ mb: 2 }}>
-              Valor:{' '}
-              <span style={{ color: '#111' }}>
-                {preco.toFixed(2).replace('.', ',')}
-              </span>
-            </Typography>
+            {/* preço só aparece se válido */}
+            {precoValido && (
+              <Typography fontWeight={600} fontSize={20} sx={{ mb: 2 }}>
+                Valor:{' '}
+                <span style={{ color: '#111' }}>
+                  {preco.toFixed(2).replace('.', ',')}
+                </span>
+              </Typography>
+            )}
 
             {/* Tamanhos (só quando habilitado) */}
             {hasSizes && sizeKeys.length > 0 && (
@@ -272,26 +280,12 @@ const ProdutoIndividual = () => {
                   <Box sx={{ flexGrow: 1 }}>
                     <Typography fontWeight={600} fontSize={16}>Escolha uma opção</Typography>
                   </Box>
-                  {/* Chip "Obrigatório" apenas informativo: já deixamos um tamanho pré-selecionado */}
-                  <Box
-                    sx={{
-                      backgroundColor: '#FF9F0A',
-                      px: 2,
-                      py: '3px',
-                      borderRadius: 1,
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: 'black',
-                      height: 'fit-content',
-                    }}
-                  >
-                    Obrigatório
-                  </Box>
                 </AccordionSummary>
                 <AccordionDetails sx={{ padding: 0 }}>
                   <FormControl>
                     {sizeKeys.map((key) => {
-                      const valor = parseFloat(produto.precos?.[key] ?? 0) || 0;
+                      const valor = toNumberBR(produto.precos?.[key]);
+                      if (!valor || valor <= 0) return null; // não renderiza tamanho sem preço
                       const label =
                         key.charAt(0).toUpperCase() + key.slice(1).replace('medio', 'médio');
                       return (
@@ -412,8 +406,9 @@ const ProdutoIndividual = () => {
               <Button
                 variant="contained"
                 onClick={handleAdicionarNaSacola}
+                disabled={!precoValido}
                 sx={{
-                  backgroundColor: '#F75724',
+                  backgroundColor: precoValido ? '#F75724' : '#9CA3AF',
                   color: 'white',
                   textTransform: 'none',
                   borderRadius: '8px',
@@ -422,10 +417,12 @@ const ProdutoIndividual = () => {
                   fontWeight: 600,
                   fontSize: '14px',
                   boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-                  '&:hover': { backgroundColor: '#e04d1c' },
+                  '&:hover': { backgroundColor: precoValido ? '#e04d1c' : '#9CA3AF' },
                 }}
               >
-                Adicionar {`${(preco * quantidade).toFixed(2).replace('.', ',')}`}
+                {precoValido
+                  ? `Adicionar R$ ${(preco * quantidade).toFixed(2).replace('.', ',')}`
+                  : 'Indisponível'}
               </Button>
             </Box>
           </Box>

@@ -27,6 +27,7 @@ import AddProductModal from '../../componentes/admin/addProductModal';
 
 export default function AdminProducts() {
   const [produtos, setProdutos] = useState([]);
+  // Agora categorias guarda objetos { id, nome } para permitir excluir
   const [categorias, setCategorias] = useState([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
@@ -43,7 +44,6 @@ export default function AdminProducts() {
   const [addCategoryModalOpen, setAddCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [deletingId, setDeletingId] = useState(null);
-
 
   const handleEditClick = (produto) => {
     setProdutoSelecionado(produto);
@@ -66,11 +66,13 @@ export default function AdminProducts() {
       setProdutos(list);
     }, (err) => console.error('onSnapshot produtos:', err));
 
-    // Categorias
+    // Categorias (agora guardando id e nome)
     const unsubCategorias = onSnapshot(collection(db, 'categorias'), (snap) => {
-      const list = snap.docs.map((d) => d.data()?.nome).filter(Boolean);
+      const list = snap.docs
+        .map((d) => ({ id: d.id, nome: d.data()?.nome }))
+        .filter((c) => c.nome);
       // ordena alfabeticamente
-      list.sort((a, b) => a.localeCompare(b));
+      list.sort((a, b) => a.nome.localeCompare(b.nome));
       setCategorias(list);
     }, (err) => console.error('onSnapshot categorias:', err));
 
@@ -93,23 +95,40 @@ export default function AdminProducts() {
     }
   };
 
-const handleDelete = async (id, nome) => {
-  if (!id) return;
-  const ok = window.confirm(`Excluir o produto "${nome ?? 'sem nome'}"?`);
-  if (!ok) return;
+  const handleDeleteCategoria = async (id, nome) => {
+    if (!id) return;
+    const ok = window.confirm(`Excluir a categoria "${nome}"?`);
+    if (!ok) return;
 
-  try {
-    setDeletingId(id);
-    await deleteDoc(doc(db, 'produtos', String(id)));
-    // onSnapshot atualiza a tabela automaticamente
-  } catch (e) {
-    console.error('Erro ao excluir produto:', e);
-    // Mostra mensagem mais clara (muito comum: regras do Firestore)
-    alert(e?.message || 'Falha ao excluir o produto.');
-  } finally {
-    setDeletingId(null);
-  }
-};
+    try {
+      await deleteDoc(doc(db, 'categorias', String(id)));
+      // onSnapshot atualiza o menu automaticamente
+      if (categoriaSelecionada === nome) {
+        setCategoriaSelecionada('');
+      }
+    } catch (e) {
+      console.error('Erro ao excluir categoria:', e);
+      alert(e?.message || 'Falha ao excluir a categoria.');
+    }
+  };
+
+  const handleDelete = async (id, nome) => {
+    if (!id) return;
+    const ok = window.confirm(`Excluir o produto "${nome ?? 'sem nome'}"?`);
+    if (!ok) return;
+
+    try {
+      setDeletingId(id);
+      await deleteDoc(doc(db, 'produtos', String(id)));
+      // onSnapshot atualiza a tabela automaticamente
+    } catch (e) {
+      console.error('Erro ao excluir produto:', e);
+      // Mostra mensagem mais clara (muito comum: regras do Firestore)
+      alert(e?.message || 'Falha ao excluir o produto.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const calcularStatusEstoque = (estoque, estoqueMinimo) => {
     const est = Number(estoque ?? 0);
@@ -155,11 +174,14 @@ const handleDelete = async (id, nome) => {
 
   const handleClickCategorias = (event) => setAnchorEl(event.currentTarget);
   const handleCloseCategorias = () => setAnchorEl(null);
-  const handleSelectCategoria = (cat) => {
-    setCategoriaSelecionada(cat);
+  const handleSelectCategoria = (catNome) => {
+    setCategoriaSelecionada(catNome);
     setCurrentPage(1);
     handleCloseCategorias();
   };
+
+  // Para compatibilidade com AddProductModal, passamos apenas os nomes
+  const categoriasNomes = categorias.map(c => c.nome);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', fontFamily: 'Poppins, sans-serif' }}>
@@ -213,16 +235,32 @@ const handleDelete = async (id, nome) => {
               }} sx={{ color: '#F75724' }}>
                 ➕ Adicionar nova categoria
               </MenuItem>
-              {categorias.map((cat, idx) => (
+
+              {categorias.map((cat) => (
                 <MenuItem
-                  key={idx}
-                  onClick={() => handleSelectCategoria(cat)}
+                  key={cat.id}
+                  onClick={() => handleSelectCategoria(cat.nome)}
                   sx={{
-                    bgcolor: cat === categoriaSelecionada ? '#FFE0DB' : '#FFF',
-                    fontWeight: cat === categoriaSelecionada ? 700 : 400,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 2,
+                    bgcolor: cat.nome === categoriaSelecionada ? '#FFE0DB' : '#FFF',
+                    fontWeight: cat.nome === categoriaSelecionada ? 700 : 400,
                   }}
                 >
-                  {cat}
+                  <span>{cat.nome}</span>
+
+                  <img
+                    src={trash}
+                    alt="Excluir categoria"
+                    style={{ width: 15, cursor: 'pointer' }}
+                    title="Excluir categoria"
+                    onClick={(e) => {
+                      e.stopPropagation(); // evita selecionar a categoria ao clicar na lixeira
+                      handleDeleteCategoria(cat.id, cat.nome);
+                    }}
+                  />
                 </MenuItem>
               ))}
             </Menu>
@@ -313,29 +351,27 @@ const handleDelete = async (id, nome) => {
                         gap:2,
                         padding:3
                       }}>
-                          <img
+                        <img
                           src={pen}
-                            style={{ 
-                              width:15,
-                              cursor:'pointer',
-                            }}
-                            onClick={() => handleEditClick(produto)}
-                            title="Editar"
-                          />
-                           
+                          style={{
+                            width:15,
+                            cursor:'pointer',
+                          }}
+                          onClick={() => handleEditClick(produto)}
+                          title="Editar"
+                        />
 
-                          <img
+                        <img
                           src={trash}
                           style={{
                             width:15,
                             cursor:'pointer',
                           }}
-                            onClick={() => handleDelete(produto.id, produto.nome)}
-                            disabled={deletingId === produto.id}
-                            title={deletingId === produto.id ? 'Excluindo...' : 'Excluir'}
-                          />
-                            
-                     </TableCell>
+                          onClick={() => handleDelete(produto.id, produto.nome)}
+                          disabled={deletingId === produto.id}
+                          title={deletingId === produto.id ? 'Excluindo...' : 'Excluir'}
+                        />
+                      </TableCell>
 
                     </TableRow>
                   );
@@ -377,7 +413,7 @@ const handleDelete = async (id, nome) => {
       <AddProductModal
         open={addProductModalOpen}
         onClose={() => setAddProductModalOpen(false)}
-        categorias={categorias}
+        categorias={categoriasNomes}
         onProdutoAdicionado={handleProdutoAdicionado}
       />
 

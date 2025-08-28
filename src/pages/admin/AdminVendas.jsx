@@ -1,4 +1,5 @@
-import React from 'react';
+// src/pages/admin/AdminVendas.jsx
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Typography,
@@ -15,52 +16,161 @@ import {
   Menu
 } from '@mui/material';
 import Sidebar from '../../componentes/admin/sidebar';
-import { FiEdit, FiTrash2 } from 'react-icons/fi';
 import logo from '../../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg';
 import SearchIcon from '@mui/icons-material/Search';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 
-export default function AdminVendas() {
-  const pedidos = [
-    { data: "01/07/2025", nome: "Fernanda Borges", nPedido: 2345, valor: "R$ 23,00", status: "Completo" },
-    { data: "02/07/2025", nome: "Fernanda Borges", nPedido: 2346, valor: "R$ 45,00", status: "Completo" },
-    { data: "03/07/2025", nome: "Fernanda Borges", nPedido: 2347, valor: "R$ 30,00", status: "Cancelado" },
-    { data: "04/07/2025", nome: "Fernanda Borges", nPedido: 2348, valor: "R$ 50,00", status: "Completo" },
-    { data: "05/07/2025", nome: "Fernanda Borges", nPedido: 2349, valor: "R$ 20,00", status: "Cancelado" },
-  ];
+import { db } from '../../firebase';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  Timestamp
+} from 'firebase/firestore';
 
-  const [anchorEl, setAnchorEl] = React.useState(null);
+// ---- helpers ----
+const fmtBRL = (v) =>
+  Number(v ?? 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+const startOfTodayLocal = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const getStatusColor = (status) => {
+  switch (status?.toLowerCase()) {
+    case 'aprovado':
+    case 'completo':
+    case 'entregue':
+      return '#DEF7EC';
+    case 'cancelado':
+      return '#FDE8E8';
+    default:
+      return '#E0E0E0';
+  }
+};
+
+const getStatusFontColor = (status) => {
+  switch (status?.toLowerCase()) {
+    case 'aprovado':
+    case 'completo':
+      return '#03543F';
+    case 'cancelado':
+      return '#9B1C1C';
+    default:
+      return '#6B7280';
+  }
+};
+
+export default function AdminVendas() {
+  const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Completo": return "#DEF7EC";
-      case "Cancelado": return "#FDE8E8";
-      default: return "#E0E0E0";
-    }
-  };
+  // filtros simples de período (opcional, fora de "hoje")
+  const [periodoDias, setPeriodoDias] = useState(30);
+  const [search, setSearch] = useState('');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const getStatusFontColor = (status) => {
-    switch (status) {
-      case "Completo": return "#03543F";
-      case "Cancelado": return "#9B1C1C";
-      default: return "#E0E0E0";
-    }
-  };
+  // recalcula limites de data baseado no período
+  const limitesData = useMemo(() => {
+    const hoje0 = startOfTodayLocal(); // limite superior exclusivo para "não de hoje"
+    const inicio = new Date(hoje0);
+    inicio.setDate(inicio.getDate() - periodoDias); // últimos N dias ANTES de hoje
+    return {
+      inicioTS: Timestamp.fromDate(inicio),
+      hoje0TS: Timestamp.fromDate(hoje0),
+    };
+  }, [periodoDias]);
 
-  const handleClick = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        setLoading(true);
+
+        // Consulta: status IN (aprovado, cancelado)
+        // AND createdAt < hoje 00:00
+        // AND createdAt >= inicio do período
+        // Ordenado por createdAt desc
+        const col = collection(db, 'pedidos');
+        const qRef = query(
+          col,
+          where('status', 'in', ['aprovado', 'cancelado']),
+          where('createdAt', '>=', limitesData.inicioTS),
+          where('createdAt', '<', limitesData.hoje0TS),
+          orderBy('createdAt', 'desc')
+        );
+
+        const snap = await getDocs(qRef);
+        const data = snap.docs.map((d) => {
+          const obj = d.data() || {};
+          const created = obj.createdAt?.toDate?.() || null;
+
+          // número/código de pedido:
+          // prioriza orderCode (curto), senão pagamento.orderNumber, senão id do doc
+          const orderCode =
+            obj.orderCode ||
+            obj.pagamento?.orderNumber ||
+            d.id;
+
+          // valor total
+          const total = Number(obj.total ?? 0);
+
+          // nome do cliente (opcional)
+          const nome = obj.nome || obj.cliente?.nome || obj.customer?.fullName || '';
+
+          return {
+            id: d.id,
+            data: created,
+            nome,
+            orderCode,
+            total,
+            status: obj.status || '',
+          };
+        });
+
+        setRows(data);
+      } catch (e) {
+        console.error('Erro ao carregar vendas:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetch();
+  }, [limitesData]);
+
+  // busca simples (por nome, orderCode, status)
+  const filtrados = useMemo(() => {
+    const t = (search || '').toLowerCase().trim();
+    if (!t) return rows;
+    return rows.filter((r) => {
+      const campos = [
+        r.nome || '',
+        String(r.orderCode || ''),
+        String(r.status || ''),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return campos.includes(t);
+    });
+  }, [rows, search]);
+
+  const handleClick = (e) => setAnchorEl(e.currentTarget);
+  const handleClose = () => setAnchorEl(null);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', fontFamily: 'Poppins, sans-serif' }}>
       <Sidebar />
 
-      <Box sx={{ flexGrow: 1, bgcolor: '#F1F1F1', height: 700  }}>
+      <Box sx={{ flexGrow: 1, bgcolor: '#F1F1F1', height: 700 }}>
         {/* Header COM FAIXA PRETA */}
         <Box
           sx={{
@@ -81,12 +191,12 @@ export default function AdminVendas() {
           <Box sx={{ height: 70, width: 'auto' }}>
             <img src={logo} alt="Logo" style={{ width: "100%", height: "100%" }} />
           </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
-          <Avatar src="https://via.placeholder.com/150" />
-          <Typography component="span" sx={{ display: 'inline-flex' }}>
-            Administrador
-          </Typography>
-        </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
+            <Avatar src="https://via.placeholder.com/150" />
+            <Typography component="span" sx={{ display: 'inline-flex' }}>
+              Administrador
+            </Typography>
+          </Box>
         </Box>
 
         <Box sx={{ p: 12 }}>
@@ -94,12 +204,14 @@ export default function AdminVendas() {
           <Typography variant="h6" fontWeight="bold" textAlign="center">Página de vendas</Typography>
           <Box sx={{ borderBottom: '2px solid black', width: '100%', mt: 1, mb: 4 }} />
 
-          {/* Barra de busca */}
-          <Box sx={{ display: 'flex', mb: 2, justifyContent: 'space-between' }}>
+          {/* Barra de busca + período */}
+          <Box sx={{ display: 'flex', mb: 2, justifyContent: 'space-between', gap: 2 }}>
             <TextField
-              placeholder="Search"
+              placeholder="Pesquisar por nome, nº pedido, status…"
               size="small"
               variant="outlined"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               sx={{
                 maxWidth: '40%',
                 flex: 1,
@@ -113,14 +225,10 @@ export default function AdminVendas() {
                 startAdornment: (
                   <SearchIcon sx={{ color: '#9CA3AF', mr: 1 }} fontSize="small" />
                 ),
-                sx: {
-                  height: '40px',
-                  pl: 1,
-                },
+                sx: { height: '40px', pl: 1 },
               }}
             />
 
-            {/* DROPDOWN */}
             <Button
               variant="outlined"
               onClick={handleClick}
@@ -135,12 +243,20 @@ export default function AdminVendas() {
                 height: 40,
               }}
             >
-              Últimos 30 dias
+              Últimos {periodoDias} dias (exclui hoje)
             </Button>
             <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-              <MenuItem onClick={handleClose}>Últimos 7 dias</MenuItem>
-              <MenuItem onClick={handleClose}>Últimos 30 dias</MenuItem>
-              <MenuItem onClick={handleClose}>Últimos 90 dias</MenuItem>
+              {[7, 30, 90].map((d) => (
+                <MenuItem
+                  key={d}
+                  onClick={() => {
+                    setPeriodoDias(d);
+                    handleClose();
+                  }}
+                >
+                  Últimos {d} dias (exclui hoje)
+                </MenuItem>
+              ))}
             </Menu>
           </Box>
 
@@ -151,66 +267,61 @@ export default function AdminVendas() {
                 <TableRow sx={{ bgcolor: '#F5F5F5' }}>
                   <TableCell sx={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#6B7280' }}>DATA</TableCell>
                   <TableCell sx={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#6B7280' }}>NOME</TableCell>
-                  <TableCell sx={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#6B7280' }}>N PEDIDO</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#6B7280' }}>Nº PEDIDO</TableCell>
                   <TableCell sx={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#6B7280' }}>VALOR</TableCell>
                   <TableCell sx={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#6B7280' }}>STATUS</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {pedidos.map((pedido, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{pedido.data}</TableCell>
-                    <TableCell>{pedido.nome}</TableCell>
-                    <TableCell>{pedido.nPedido}</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>{pedido.valor}</TableCell>
-                    <TableCell>
-                      <Box sx={{
-                        display: 'inline-block',
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: '4px',
-                        bgcolor: getStatusColor(pedido.status),
-                        color: getStatusFontColor(pedido.status),
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        fontFamily: 'Poppins, sans-serif'
-                      }}>
-                        {pedido.status}
-                      </Box>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
+                      Carregando…
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : filtrados.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
+                      Nada encontrado para o período/termo aplicado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtrados.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>
+                        {p.data ? p.data.toLocaleDateString('pt-BR') : '-'}
+                      </TableCell>
+                      <TableCell>{p.nome || '-'}</TableCell>
+                      <TableCell>{p.orderCode}</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>
+                        R$ {fmtBRL(p.total)}
+                      </TableCell>
+                      <TableCell>
+                        <Box
+                          sx={{
+                            display: 'inline-block',
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: '4px',
+                            bgcolor: getStatusColor(p.status),
+                            color: getStatusFontColor(p.status),
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            fontFamily: 'Poppins, sans-serif',
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {p.status}
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </Paper>
 
-          {/* Paginação NOVA */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            {[['‹'], [1], [2], [3], ['›']].map((item, index) => {
-              const isActive = item[0] === 2; // página atual
-              return (
-                <Button
-                  key={index}
-                  size="small"
-                  sx={{
-                    minWidth: '40px',
-                    height: '40px',
-                    border: '1px solid #D1D5DB',
-                    bgcolor: isActive ? '#F3F4F6' : '#FFFFFF',
-                    color: '#374151',
-                    borderRadius: 0,
-                    fontFamily: 'Poppins, sans-serif',
-                    boxShadow: 'none',
-                    '&:hover': {
-                      bgcolor: isActive ? '#F3F4F6' : '#F9FAFB',
-                    },
-                  }}
-                >
-                  {item}
-                </Button>
-              );
-            })}
-          </Box>
+          {/* Paginação simples poderia ser adicionada depois, se necessário */}
         </Box>
       </Box>
     </Box>

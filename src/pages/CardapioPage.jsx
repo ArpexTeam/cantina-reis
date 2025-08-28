@@ -90,8 +90,8 @@ function CardapioPage() {
       ? "pequeno"
       : produto.precos?.medio
       ? "medio"
-      : produto.precos?.grande
-      ? "grande"
+      : produto.precos?.executivo
+      ? "executivo"
       : null;
 
     const preco = tamanhoSelecionado
@@ -229,11 +229,12 @@ function CardapioPage() {
       >
         {produtos.map((produto) => (
           <Box key={produto.id}>
-            <ProductCard
-              produto={produto}
-              onAdd={() => handleAdicionarProduto(produto)}
-              onView={() => handleAbrirDetalhe(produto.id)}
-            />
+         <ProductCard
+            produto={produto}
+            semEstoque={Number(produto.estoque ?? 0) <= 0}
+            onAdd={() => handleAdicionarProduto(produto)}
+            onView={() => handleAbrirDetalhe(produto.id)}
+          />
           </Box>
         ))}
       </Box>

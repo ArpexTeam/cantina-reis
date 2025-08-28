@@ -1,54 +1,28 @@
-// src/pages/admin/AdminPedidos.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Avatar, Paper, Table, TableHead, TableBody, TableRow, TableCell,
-  Button, TextField, MenuItem, Menu, Stack
+  Button, TextField, Stack
 } from '@mui/material';
 import Sidebar from '../../componentes/admin/sidebar';
 import {
   collection, getDocs, query, where, Timestamp,
-  updateDoc, doc, getDoc, runTransaction
+  updateDoc, doc, runTransaction, orderBy
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import logo from '../../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg';
 import SearchIcon from '@mui/icons-material/Search';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { format } from 'date-fns';
+import NovoPedidoModal from '../../componentes/admin/NovoPedidoModal';
 
 export default function AdminPedidos() {
   const [pedidos, setPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [dateFilter, setDateFilter] = useState(30); // dias
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  const open = Boolean(anchorEl);
+  const [novoOpen, setNovoOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchPedidos = async () => {
-      try {
-        const cutoffDate = Timestamp.fromDate(new Date(Date.now() - dateFilter * 24 * 60 * 60 * 1000));
-        const q = query(collection(db, 'pedidos'), where('createdAt', '>=', cutoffDate));
-        const querySnapshot = await getDocs(q);
-        const pedidosData = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setPedidos(pedidosData);
-      } catch (error) {
-        console.error('Erro ao buscar pedidos:', error);
-      }
-    };
-    fetchPedidos();
-  }, [dateFilter]);
-
-  const handleClick = (event) => { setAnchorEl(event.currentTarget); };
-  const handleClose = () => { setAnchorEl(null); };
-  const handleSelectDate = (days) => {
-    setDateFilter(days);
-    setAnchorEl(null);
-    setCurrentPage(1);
-  };
-
+  // --- helpers de cor do status
   const getStatusColor = (status) => {
     switch (status) {
       case 'ativo':
@@ -76,20 +50,51 @@ export default function AdminPedidos() {
     }
   };
 
+  // --- calcula limites de "hoje"
+  const makeTodayBounds = () => {
+    const now = new Date();
+    const hoje0 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const amanha0 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+    return {
+      hoje0TS: Timestamp.fromDate(hoje0),
+      amanha0TS: Timestamp.fromDate(amanha0),
+    };
+  };
+
+  const loadPedidos = async () => {
+    try {
+      const { hoje0TS, amanha0TS } = makeTodayBounds();
+      const qy = query(
+        collection(db, 'pedidos'),
+        where('createdAt', '>=', hoje0TS),
+        where('createdAt', '<', amanha0TS),
+        orderBy('createdAt', 'desc')
+      );
+      const snap = await getDocs(qy);
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setPedidos(rows);
+    } catch (e) {
+      console.error('Erro ao buscar pedidos:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadPedidos();
+  }, []);
+
   // Aprova pedido + baixa estoque se for "No caixa" pendente
   const handleStatusChange = async (pedidoId, novoStatus) => {
     try {
       const pedido = pedidos.find((p) => p.id === pedidoId);
       if (!pedido) return;
 
-      // Caso especial: pendente + offline (pagar no caixa) => baixar estoque antes de aprovar
       const isPendenteOffline =
         pedido.status === 'pendente' &&
         (pedido.pagamento?.provedor === 'offline' || pedido.tipoServico === 'No caixa');
 
       if (novoStatus === 'aprovado' && isPendenteOffline) {
-        // Transação para baixar estoque de todos os itens
         await runTransaction(db, async (transaction) => {
+          // baixa estoque de todos os itens
           for (const item of (pedido.itens || [])) {
             const prodId = item.id;
             const qtd = Number(item.quantidade ?? item.quantity ?? 1);
@@ -108,19 +113,18 @@ export default function AdminPedidos() {
             transaction.update(prodRef, { estoque: estoqueAtual - qtd });
           }
 
-          // Atualiza status do pedido dentro da transação
+          // atualiza status do pedido
           const pedidoRef = doc(db, 'pedidos', pedidoId);
           transaction.update(pedidoRef, { status: 'aprovado' });
         });
 
-        // Atualiza UI local
         setPedidos((prev) =>
           prev.map((p) => (p.id === pedidoId ? { ...p, status: 'aprovado' } : p))
         );
         return;
       }
 
-      // Fluxo padrão (online já confirmado, ou mudar para cancelado, etc.)
+      // Demais mudanças de status (ex.: cancelar)
       const pedidoRef = doc(db, 'pedidos', pedidoId);
       await updateDoc(pedidoRef, { status: novoStatus });
       setPedidos((prev) =>
@@ -132,15 +136,17 @@ export default function AdminPedidos() {
     }
   };
 
+  // Busca/filtra local
   const pedidosFiltrados = pedidos.filter((p) => {
     const t = searchTerm.toLowerCase();
+    const orderCode = (p.pagamento?.orderNumber || p.id || '').toString().toLowerCase();
     return (
-      p.nome?.toLowerCase().includes(t) ||
-      p.telefone?.toLowerCase().includes(t) ||
-      p.status?.toLowerCase().includes(t) ||
-      p.tipoServico?.toLowerCase().includes(t) ||
-      p.pagamento?.orderNumber?.toLowerCase?.()?.includes(t) ||
-      p.itens?.some((item) => item.nome?.toLowerCase().includes(t))
+      orderCode.includes(t) ||
+      (p.nome || '').toLowerCase().includes(t) ||
+      (p.telefone || '').toLowerCase().includes(t) ||
+      (p.status || '').toLowerCase().includes(t) ||
+      (p.tipoServico || '').toLowerCase().includes(t) ||
+      (p.itens || []).some((item) => (item.nome || item.Name || '').toLowerCase().includes(t))
     );
   });
 
@@ -171,13 +177,15 @@ export default function AdminPedidos() {
         </Box>
 
         <Box sx={{ p: 4, mt: 10 }}>
-          <Typography variant="h6" fontWeight="bold" textAlign="center">Página de pedidos</Typography>
+          <Typography variant="h6" fontWeight="bold" textAlign="center">
+            Pedidos (HOJE)
+          </Typography>
           <Box sx={{ borderBottom: '2px solid black', my: 2 }} />
 
-          {/* Barra de busca */}
-          <Box sx={{ display: 'flex', mb: 2, justifyContent: 'space-between' }}>
+          {/* Barra: busca + novo */}
+          <Box sx={{ display: 'flex', mb: 2, justifyContent: 'space-between', gap: 2 }}>
             <TextField
-              placeholder="Pesquisar..."
+              placeholder="Pesquisar por nº pedido, nome, item, status..."
               size="small"
               variant="outlined"
               value={searchTerm}
@@ -195,25 +203,18 @@ export default function AdminPedidos() {
             />
 
             <Button
-              variant="outlined"
-              onClick={handleClick}
-              startIcon={<AccessTimeIcon />}
-              endIcon={<KeyboardArrowDownIcon />}
+              variant="contained"
+              onClick={() => setNovoOpen(true)}
               sx={{
-                borderRadius: '6px',
-                border: '1px solid #E5E7EB',
+                ml: 'auto',
+                bgcolor: '#F75724',
                 textTransform: 'none',
-                color: '#111827',
-                height: 40,
+                fontWeight: 700,
+                '&:hover': { bgcolor: '#e6491c' },
               }}
             >
-              Últimos {dateFilter} dias
+              Novo pedido (caixa)
             </Button>
-            <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-              {[7, 30, 90].map((d) => (
-                <MenuItem key={d} onClick={() => handleSelectDate(d)}>Últimos {d} dias</MenuItem>
-              ))}
-            </Menu>
           </Box>
 
           {/* Tabela */}
@@ -242,7 +243,7 @@ export default function AdminPedidos() {
                       <TableCell>
                         {pedido.itens?.map((item, idx) => (
                           <Box key={idx}>
-                            {item.nome || item.Name} x{item.quantidade ?? item.quantity ?? 1}
+                            {(item.nome || item.Name || 'item')} x{item.quantidade ?? item.quantity ?? 1}
                           </Box>
                         ))}
                       </TableCell>
@@ -279,10 +280,7 @@ export default function AdminPedidos() {
                             fontSize: '12px',
                             py: 0.5,
                             px: 1.5,
-                            '&:hover': {
-                              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
-                              transform: 'translateY(-1px)',
-                            },
+                            '&:hover': { boxShadow: '0 6px 18px rgba(0,0,0,0.25)', transform: 'translateY(-1px)' },
                           }}
                         >
                           Aprovar
@@ -300,10 +298,7 @@ export default function AdminPedidos() {
                             py: 0.5,
                             px: 1.5,
                             mr: 1,
-                            '&:hover': {
-                              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
-                              transform: 'translateY(-1px)',
-                            },
+                            '&:hover': { boxShadow: '0 6px 18px rgba(0,0,0,0.25)', transform: 'translateY(-1px)' },
                           }}
                         >
                           Cancelar
@@ -317,7 +312,7 @@ export default function AdminPedidos() {
           </Paper>
 
           {/* Paginação */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, display: "flex", justifyContent: "flex-end", marginRight: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, mr: 2 }}>
             {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
               <Button
                 key={page}
@@ -337,6 +332,13 @@ export default function AdminPedidos() {
           </Box>
         </Box>
       </Box>
+
+      {/* Modal de novo pedido */}
+      <NovoPedidoModal
+        open={novoOpen}
+        onClose={() => setNovoOpen(false)}
+        onCreated={() => loadPedidos()}
+      />
     </Box>
   );
 }

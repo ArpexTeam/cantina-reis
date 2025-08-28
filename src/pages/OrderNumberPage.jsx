@@ -9,15 +9,18 @@ import {
   Divider,
   Stack,
   Tooltip,
+  Alert,
+  Snackbar,
 } from "@mui/material";
 import ArrowBackIosNewRoundedIcon from "@mui/icons-material/ArrowBackIosNewRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import PrintRoundedIcon from "@mui/icons-material/PrintRounded";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useNavigate, useParams } from "react-router-dom";
+import vendedora from "../img/Balconista.png";
 
 const Illo = () => (
-  // Ilustração simples (SVG inline). Troque por <img src="/img/..." /> se preferir.
   <svg width="180" height="120" viewBox="0 0 300 200" role="img" aria-label="Atendente no caixa">
     <rect x="0" y="170" width="300" height="12" fill="#F75724" />
     <rect x="40" y="140" width="220" height="35" rx="6" fill="#DDDDDD" />
@@ -33,15 +36,58 @@ export default function OrderNumberPage() {
   const { orderNumber } = useParams();
   const navigate = useNavigate();
 
+  // Se não vier param, tenta recuperar o último salvo
+  React.useEffect(() => {
+    if (!orderNumber) {
+      const last = localStorage.getItem("lastOrderNumber");
+      if (last) {
+        navigate(`/numero/${last}`, { replace: true });
+      }
+    }
+  }, [orderNumber, navigate]);
+
   const num = (orderNumber || "").toString().toUpperCase();
+
+  // Salva localmente (garante que a tela também registre como "último número")
+  React.useEffect(() => {
+    if (num) {
+      localStorage.setItem("lastOrderNumber", num);
+      // opcional: guardar a data para lógica futura
+      localStorage.setItem(
+        "lastOrderSavedAt",
+        new Date().toISOString()
+      );
+    }
+  }, [num]);
+
+  // (Opcional) Aviso ao sair da página: pode ser intrusivo em mobile.
+  // React.useEffect(() => {
+  //   const handler = (e) => {
+  //     if (num) {
+  //       e.preventDefault();
+  //       e.returnValue = ""; // alguns browsers exigem string vazia
+  //     }
+  //   };
+  //   window.addEventListener("beforeunload", handler);
+  //   return () => window.removeEventListener("beforeunload", handler);
+  // }, [num]);
+
+  const [copied, setCopied] = React.useState(false);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(num);
+      setCopied(true);
     } catch {}
   };
 
   const print = () => window.print();
+
+  const shareWhatsApp = () => {
+    const text = encodeURIComponent(`Meu número de pedido é: ${num}`);
+    const url = `https://wa.me/?text=${text}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <Box
@@ -88,6 +134,22 @@ export default function OrderNumberPage() {
           gap: 2,
         }}
       >
+        {/* Aviso sutil para guardar o número */}
+        {num && (
+          <Alert
+            severity="info"
+            variant="outlined"
+            sx={{
+              width: "100%",
+              borderRadius: 2,
+              borderColor: "#93C5FD",
+              bgcolor: "#EFF6FF",
+            }}
+          >
+            Guarde seu número para acompanhamento. Você pode copiar, imprimir ou enviar por WhatsApp.
+          </Alert>
+        )}
+
         <Typography variant="body1" sx={{ color: "#6B7280", fontWeight: 500 }}>
           Aguarde ser chamado pelo número do seu pedido!
         </Typography>
@@ -108,21 +170,61 @@ export default function OrderNumberPage() {
           {num || "— — — — —"}
         </Typography>
 
-        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-          <Tooltip title="Copiar número">
-            <IconButton onClick={copy}>
-              <ContentCopyRoundedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Imprimir">
-            <IconButton onClick={print}>
-              <PrintRoundedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
+        {/* Ações: copiar, imprimir, WhatsApp */}
+        {num && (
+          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+            <Tooltip title="Copiar">
+              <Button
+                variant="outlined"
+                onClick={copy}
+                startIcon={<ContentCopyRoundedIcon />}
+                sx={{
+                  textTransform: "none",
+                  borderColor: "#F75724",
+                  color: "#F75724",
+                  "&:hover": { borderColor: "#e6491c", bgcolor: "#FFF1EB" },
+                }}
+              >
+                Copiar
+              </Button>
+            </Tooltip>
 
-        <Box sx={{ mt: 1 }}>
-          <Illo />
+            <Tooltip title="Imprimir">
+              <Button
+                variant="outlined"
+                onClick={print}
+                startIcon={<PrintRoundedIcon />}
+                sx={{
+                  textTransform: "none",
+                  borderColor: "#F75724",
+                  color: "#F75724",
+                  "&:hover": { borderColor: "#e6491c", bgcolor: "#FFF1EB" },
+                }}
+              >
+                Imprimir
+              </Button>
+            </Tooltip>
+
+            <Tooltip title="Enviar por WhatsApp">
+              <Button
+                variant="contained"
+                onClick={shareWhatsApp}
+                startIcon={<WhatsAppIcon />}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 800,
+                  bgcolor: "#22c55e",
+                  "&:hover": { bgcolor: "#16a34a" },
+                }}
+              >
+                WhatsApp
+              </Button>
+            </Tooltip>
+          </Stack>
+        )}
+
+        <Box sx={{ mt: 2 }}>
+          <img src={vendedora} width={200} alt="Atendente" />
         </Box>
 
         <Typography sx={{ color: "#6B7280", fontWeight: 600, mt: 1 }}>
@@ -148,7 +250,13 @@ export default function OrderNumberPage() {
         </Button>
       </Container>
 
-
+      <Snackbar
+        open={copied}
+        autoHideDuration={1800}
+        onClose={() => setCopied(false)}
+        message="Número copiado!"
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }

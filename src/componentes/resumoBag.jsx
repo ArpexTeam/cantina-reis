@@ -9,7 +9,7 @@ import {
   doc,
   getDoc,
   runTransaction,
-  increment,
+  // increment, // não usado aqui, pode remover se quiser
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -38,9 +38,51 @@ const toCents = (v) => {
   return 0;
 };
 
-// orderNumber curto (máx 5). Ex.: "4F3C8"
-const genOrderNumber5 = () =>
-  (Math.floor(Math.random() * 36 ** 5).toString(36).toUpperCase()).padStart(5, "0").slice(-5);
+// ================== GERADOR DE NÚMERO DE PEDIDO (DIÁRIO, ÚNICO, 1 a 4 DÍGITOS) ==================
+// Retorna "YYYY-MM-DD" na timezone de São Paulo (evita mudança de dia por fuso)
+function getTodayKeySP() {
+  // en-CA formata como YYYY-MM-DD
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * Gera o próximo número de pedido do dia (1, 2, 3, ..., 9999).
+ * - Único por dia (usa transação no Firestore).
+ * - No máximo 4 dígitos. NÃO faz padding (então pode ser "1", "42", "105", "9999").
+ * - Reseta diariamente por doc: "orderCounters/{YYYY-MM-DD}".
+ */
+async function getNextDailyOrderNumber() {
+  const todayKey = getTodayKeySP(); // "YYYY-MM-DD"
+  const ref = doc(db, "orderCounters", todayKey);
+  let nextNumber;
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+
+    if (!snap.exists()) {
+      // primeiro pedido do dia
+      transaction.set(ref, { current: 1, updatedAt: serverTimestamp() });
+      nextNumber = 1;
+    } else {
+      const current = Number(snap.data()?.current || 0);
+      nextNumber = current + 1;
+      if (nextNumber > 9999) {
+        throw new Error(
+          "Limite diário de 9999 pedidos atingido. Tente novamente amanhã."
+        );
+      }
+      transaction.update(ref, { current: nextNumber, updatedAt: serverTimestamp() });
+    }
+  });
+
+  // retorna string sem padding -> "1", "12", "123", "9999"
+  return String(nextNumber);
+}
 
 // mapeia itens -> Cielo
 function mapSacolaToCieloItems(sacola) {
@@ -67,7 +109,7 @@ function getCheckoutUrl(resData) {
 // chama backend -> Cielo
 async function criarCheckoutViaBackend({ sacola, orderNumber }) {
   const payload = {
-    OrderNumber: orderNumber,                 // usa o curto de 5 chars
+    OrderNumber: orderNumber, // usa o sequencial diário (1..9999)
     SoftDescriptor: "CantinaReis",
     Cart: {
       Discount: { Type: "Percent", Value: 0 },
@@ -170,8 +212,8 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
         }
       }
 
-      // gera o número curto (5 chars) — usado em ambos os fluxos
-      const orderNumber = genOrderNumber5();
+      // === número de pedido único por dia (1..9999, sem padding) ===
+      const orderNumber = await getNextDailyOrderNumber();
 
       if (servico === "No caixa") {
         // **NÃO** chama Cielo. Cria pedido pendente agora. **NÃO** baixa estoque aqui.
@@ -183,7 +225,7 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
           total,
           pagamento: {
             provedor: "offline",
-            orderNumber,
+            orderNumber, // ex.: "1", "12", "345", "9999"
           },
         };
         await addDoc(collection(db, "pedidos"), pedido);

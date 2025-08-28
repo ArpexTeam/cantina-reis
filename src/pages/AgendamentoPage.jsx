@@ -20,7 +20,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import { useNavigate } from 'react-router-dom';
 
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, runTransaction } from 'firebase/firestore';
 
 // === CONFIG ===
 const API_URL = 'http://localhost:3001/api/checkout';
@@ -38,8 +38,40 @@ const toCents = (v) => {
   }
   return 0;
 };
-const genOrderNumber5 = () =>
-  (Math.floor(Math.random() * 36 ** 5).toString(36).toUpperCase()).padStart(5, '0').slice(-5);
+
+// ========= GERADOR DE NÚMERO DE PEDIDO (sequencial diário até 4 dígitos) ==========
+function getTodayKeySP() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()); // "YYYY-MM-DD"
+}
+
+async function getNextDailyOrderNumber() {
+  const todayKey = getTodayKeySP();
+  const ref = doc(db, 'orderCounters', todayKey);
+  let nextNumber;
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists()) {
+      transaction.set(ref, { current: 1, updatedAt: serverTimestamp() });
+      nextNumber = 1;
+    } else {
+      const current = Number(snap.data()?.current || 0);
+      nextNumber = current + 1;
+      if (nextNumber > 9999) {
+        throw new Error('Limite diário de 9999 pedidos atingido.');
+      }
+      transaction.update(ref, { current: nextNumber, updatedAt: serverTimestamp() });
+    }
+  });
+
+  // retorna como string, sem padding (ex.: "1", "12", "345", "9999")
+  return String(nextNumber);
+}
 
 const mapSacolaToCieloItems = (sacola) =>
   sacola.map((p) => ({
@@ -91,7 +123,8 @@ export default function AgendamentoPage() {
         return;
       }
 
-      const orderNumber = genOrderNumber5();
+      // número de pedido sequencial diário (1..9999, pode ter menos de 4 dígitos)
+      const orderNumber = await getNextDailyOrderNumber();
       const [dataAgendamento, horaAgendamento] = dataHora.split('T');
 
       if (modoPagamento === 'No caixa') {
@@ -119,7 +152,6 @@ export default function AgendamentoPage() {
       }
 
       // === Online (Cielo) ===
-      // 1) cria um intent (sem mexer em estoque)
       await addDoc(collection(db, 'checkoutIntents'), {
         createdAt: serverTimestamp(),
         orderNumber,
@@ -131,7 +163,6 @@ export default function AgendamentoPage() {
         cliente: { nome, telefone, observacoes: mensagem },
       });
 
-      // 2) chama backend -> Cielo
       const payload = {
         OrderNumber: orderNumber,
         SoftDescriptor: 'CantinaReis',
@@ -140,7 +171,6 @@ export default function AgendamentoPage() {
           Items: mapSacolaToCieloItems(sacola),
         },
         Shipping: { Type: 'WithoutShipping', Price: 0 },
-        // opcional:
         Customer: {
           FullName: nome || 'Cliente',
           Phone: telefone || '',
@@ -149,12 +179,11 @@ export default function AgendamentoPage() {
         },
       };
 
-      // valida preços localmente
       if (payload.Cart.Items.some((i) => !i.UnitPrice || i.UnitPrice < 1)) {
         console.table(payload.Cart.Items.map((i) => ({
           Name: i.Name, UnitPrice: i.UnitPrice, Quantity: i.Quantity
         })));
-        throw new Error('Algum item está sem preço (centavos). Verifique "precoSelecionado" na sacola.');
+        throw new Error('Algum item está sem preço válido.');
       }
 
       const res = await fetch(API_URL, {

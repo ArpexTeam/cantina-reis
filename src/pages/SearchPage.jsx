@@ -88,7 +88,7 @@ export default function SearchPage() {
     const tamanhoSelecionado =
       produto.precos?.pequeno ? "pequeno"
       : produto.precos?.medio ? "medio"
-      : produto.precos?.grande ? "grande"
+      : produto.precos?.executivo ? "executivo"
       : null;
 
     const preco = tamanhoSelecionado

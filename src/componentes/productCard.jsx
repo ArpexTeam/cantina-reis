@@ -1,20 +1,37 @@
+// src/componentes/ProductCard.jsx
 import React from "react";
-import { Box, Typography, IconButton } from "@mui/material";
+import { Box, Typography, IconButton, Chip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 
+// Converte "R$ 1.234,56", "12,00" etc. para número (reais)
+const toNumberBR = (v) => {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const s = v.trim().replace(/R\$\s?/i, "").replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  return NaN;
+};
+
+// menor preço > 0 entre pequeno/medio/executivo
 const menorPreco = (precos = {}) =>
-  ["pequeno", "medio", "grande"]
-    .map((k) => Number(precos?.[k]))
-    .filter(Number.isFinite)
+  ["pequeno", "medio", "executivo"]
+    .map((k) => toNumberBR(precos?.[k]))
+    .filter((v) => Number.isFinite(v) && v > 0)
     .sort((a, b) => a - b)[0];
 
-export default function ProductCard({ produto, onAdd, onView }) {
+export default function ProductCard({ produto, onAdd, onView, semEstoque = false }) {
   const { nome, descricao, imagem, precos } = produto ?? {};
+
   const precoNum = menorPreco(precos ?? {});
-  const precoFmt = Number(precoNum ?? 0).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const temPreco = Number.isFinite(precoNum);
+  const precoFmt = temPreco
+    ? precoNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "Consultar";
+
+  // Pode adicionar apenas se tiver preço válido e tiver estoque
+  const podeAdicionar = temPreco && !semEstoque;
 
   return (
     <Box
@@ -23,6 +40,7 @@ export default function ProductCard({ produto, onAdd, onView }) {
       onClick={onView}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " " ? onView?.() : null)}
       sx={{
+        position: "relative",
         display: "grid",
         gridTemplateColumns: "168px 1fr 40px",
         alignItems: "center",
@@ -35,10 +53,36 @@ export default function ProductCard({ produto, onAdd, onView }) {
         p: "6px",
         cursor: "pointer",
         fontFamily: "Poppins, sans-serif",
+        opacity: semEstoque ? 0.85 : 1,
       }}
     >
+      {/* Selo Esgotado */}
+      {semEstoque && (
+        <Chip
+          label="Esgotado"
+          color="default"
+          size="small"
+          sx={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            bgcolor: "#9CA3AF",
+            color: "#fff",
+            fontWeight: 700,
+          }}
+        />
+      )}
+
       {/* Imagem */}
-      <Box sx={{ width: "168px", height: "100px", borderRadius: "5px", overflow: "hidden" }}>
+      <Box
+        sx={{
+          width: "168px",
+          height: "100px",
+          borderRadius: "5px",
+          overflow: "hidden",
+          filter: semEstoque ? "grayscale(100%)" : "none",
+        }}
+      >
         <img
           src={imagem}
           alt={nome}
@@ -47,7 +91,7 @@ export default function ProductCard({ produto, onAdd, onView }) {
       </Box>
 
       {/* Texto */}
-      <Box sx={{ minWidth: 0, textAlign:'left'}}>
+      <Box sx={{ minWidth: 0, textAlign: "left" }}>
         <Typography
           title={nome}
           sx={{
@@ -92,26 +136,28 @@ export default function ProductCard({ produto, onAdd, onView }) {
             color: "#111827",
           }}
         >
-          R${precoFmt}
+          R$ {precoFmt}
         </Typography>
       </Box>
 
       {/* Botão + */}
       <IconButton
+        aria-label={semEstoque ? "Produto esgotado" : "Adicionar ao carrinho"}
         onClick={(e) => {
           e.stopPropagation();
-          onAdd?.();
+          if (podeAdicionar) onAdd?.();
         }}
+        disabled={!podeAdicionar}
         sx={{
           justifySelf: "end",
           alignSelf: "center",
           width: 32,
           height: 32,
           borderRadius: "8px",
-          bgcolor: "#FF6B2C",
-          color: "#fff",
-          marginTop:6,
-          "&:hover": { bgcolor: "#e64c1a" },
+          bgcolor: podeAdicionar ? "#FF6B2C" : "#F3F4F6",
+          color: podeAdicionar ? "#fff" : "#9CA3AF",
+          marginTop: 6,
+          "&:hover": { bgcolor: podeAdicionar ? "#e64c1a" : "#F3F4F6" },
         }}
       >
         <AddIcon sx={{ fontSize: 18 }} />
