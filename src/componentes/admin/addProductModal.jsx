@@ -368,7 +368,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
                       fontWeight: 500,
                     },
                   }}
-                  label={`Preço ${size}`}
+                  label={`${size == 'executivo' ? 'Prato': 'Preço'} ${size}`}
                   sx={{
                     width: 150,
                     '& .MuiOutlinedInput-root': { mt: 0.5 },

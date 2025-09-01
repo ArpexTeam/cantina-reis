@@ -336,7 +336,7 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
                       fontWeight: 500,
                     },
                   }}
-                  label={`Preço ${size}`}
+                  label={`${size == 'executivo' ? 'Prato': 'Preço'} ${size}`}
                   sx={{
                     width: 150,
                     '& .MuiOutlinedInput-root': { mt: 0.5 },

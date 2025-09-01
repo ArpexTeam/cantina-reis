@@ -22,8 +22,8 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, doc, runTransaction } from 'firebase/firestore';
 
-// === CONFIG ===
-const API_URL = 'http://localhost:3001/api/checkout';
+// === API (centralizada) ===
+import { CHECKOUT_URL } from '../config/api';
 
 // helpers
 const toCents = (v) => {
@@ -180,13 +180,17 @@ export default function AgendamentoPage() {
       };
 
       if (payload.Cart.Items.some((i) => !i.UnitPrice || i.UnitPrice < 1)) {
-        console.table(payload.Cart.Items.map((i) => ({
-          Name: i.Name, UnitPrice: i.UnitPrice, Quantity: i.Quantity
-        })));
+        console.table(
+          payload.Cart.Items.map((i) => ({
+            Name: i.Name,
+            UnitPrice: i.UnitPrice,
+            Quantity: i.Quantity,
+          }))
+        );
         throw new Error('Algum item está sem preço válido.');
       }
 
-      const res = await fetch(API_URL, {
+      const res = await fetch(CHECKOUT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

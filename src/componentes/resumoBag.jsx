@@ -9,14 +9,12 @@ import {
   doc,
   getDoc,
   runTransaction,
-  // increment, // não usado aqui, pode remover se quiser
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import { CHECKOUT_URL } from "../config/api"; // <<<<<< usa a URL da Vercel
 
 const tiposServico = ["No caixa", "Online", "Agendar"];
-
-const API_URL = `http://localhost:3001/api/checkout`;
 
 // BRL
 const formatBRL = (n) =>
@@ -131,7 +129,7 @@ async function criarCheckoutViaBackend({ sacola, orderNumber }) {
     );
   }
 
-  const res = await fetch(API_URL, {
+  const res = await fetch(CHECKOUT_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
