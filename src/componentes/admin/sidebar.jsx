@@ -23,7 +23,9 @@ export default function Sidebar() {
     <Box
       sx={{
         width: 240,
-        height: "100vh",
+        alignSelf: 'stretch',    // estica para a altura do container da página
+        minHeight: '100vh',      // garante no mínimo a altura da janela
+        position: 'sticky',
         bgcolor: '#fff',
         borderRight: '1px solid #E0E0E0',
         display: 'flex',

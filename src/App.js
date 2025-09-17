@@ -20,6 +20,7 @@ import AdminNFePage from './pages/admin/AdminNFePage';
 
 import { AuthProvider } from './AuthContext';
 import PrivateRoute from './PrivateRoute';
+import CheckoutReturn from './pages/CheckoutReturn';
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
               <Route path="/agendar" element={<AgendamentoPage />} />
               <Route path="/numero/:orderNumber" element={<OrderNumberPage />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/checkout/retorno" element={<CheckoutReturn />} />
 
               {/* Rotas protegidas */}
               <Route

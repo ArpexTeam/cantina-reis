@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
-import { CHECKOUT_URL } from "../config/api"; // <<<<<< usa a URL da Vercel
+import { CHECKOUT_URL } from "../config/api"; // backend (Vercel) que cria o checkout na Cielo
 
 const tiposServico = ["No caixa", "Online", "Agendar"];
 
@@ -36,26 +36,18 @@ const toCents = (v) => {
   return 0;
 };
 
-// ================== GERADOR DE NÚMERO DE PEDIDO (DIÁRIO, ÚNICO, 1 a 4 DÍGITOS) ==================
-// Retorna "YYYY-MM-DD" na timezone de São Paulo (evita mudança de dia por fuso)
+// ========== Sequencial diário (1..9999) ==========
 function getTodayKeySP() {
-  // en-CA formata como YYYY-MM-DD
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  }).format(new Date()); // "YYYY-MM-DD"
 }
 
-/**
- * Gera o próximo número de pedido do dia (1, 2, 3, ..., 9999).
- * - Único por dia (usa transação no Firestore).
- * - No máximo 4 dígitos. NÃO faz padding (então pode ser "1", "42", "105", "9999").
- * - Reseta diariamente por doc: "orderCounters/{YYYY-MM-DD}".
- */
 async function getNextDailyOrderNumber() {
-  const todayKey = getTodayKeySP(); // "YYYY-MM-DD"
+  const todayKey = getTodayKeySP();
   const ref = doc(db, "orderCounters", todayKey);
   let nextNumber;
 
@@ -63,26 +55,22 @@ async function getNextDailyOrderNumber() {
     const snap = await transaction.get(ref);
 
     if (!snap.exists()) {
-      // primeiro pedido do dia
       transaction.set(ref, { current: 1, updatedAt: serverTimestamp() });
       nextNumber = 1;
     } else {
       const current = Number(snap.data()?.current || 0);
       nextNumber = current + 1;
       if (nextNumber > 9999) {
-        throw new Error(
-          "Limite diário de 9999 pedidos atingido. Tente novamente amanhã."
-        );
+        throw new Error("Limite diário de 9999 pedidos atingido. Tente novamente amanhã.");
       }
       transaction.update(ref, { current: nextNumber, updatedAt: serverTimestamp() });
     }
   });
 
-  // retorna string sem padding -> "1", "12", "123", "9999"
-  return String(nextNumber);
+  return String(nextNumber); // "1".."9999" (sem padding)
 }
 
-// mapeia itens -> Cielo
+// ====== Cielo payload ======
 function mapSacolaToCieloItems(sacola) {
   return sacola.map((p) => ({
     Name: p?.nome ?? p?.name ?? "Produto",
@@ -104,10 +92,9 @@ function getCheckoutUrl(resData) {
   );
 }
 
-// chama backend -> Cielo
 async function criarCheckoutViaBackend({ sacola, orderNumber }) {
   const payload = {
-    OrderNumber: orderNumber, // usa o sequencial diário (1..9999)
+    OrderNumber: orderNumber,
     SoftDescriptor: "CantinaReis",
     Cart: {
       Discount: { Type: "Percent", Value: 0 },
@@ -124,9 +111,7 @@ async function criarCheckoutViaBackend({ sacola, orderNumber }) {
         Quantity: i.Quantity,
       }))
     );
-    throw new Error(
-      "Algum item está sem preço (centavos). Verifique 'precoSelecionado' na sacola."
-    );
+    throw new Error("Algum item está sem preço (centavos). Verifique 'precoSelecionado' na sacola.");
   }
 
   const res = await fetch(CHECKOUT_URL, {
@@ -168,7 +153,6 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
     }
 
     if (servico === "Agendar") {
-      // no futuro: decidir entre online/caixa dentro do fluxo de agendamento
       navigate("/agendar");
       return;
     }
@@ -183,7 +167,7 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
         return;
       }
 
-      // checagem básica de estoque (mesma do seu código)
+      // Checagem básica de estoque
       const itensAgrupados = sacola.reduce((acc, item) => {
         const id = item.id;
         const q = Number(item.quantity ?? item.quantidade ?? 1);
@@ -210,11 +194,11 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
         }
       }
 
-      // === número de pedido único por dia (1..9999, sem padding) ===
+      // Número de pedido único (1..9999)
       const orderNumber = await getNextDailyOrderNumber();
 
       if (servico === "No caixa") {
-        // **NÃO** chama Cielo. Cria pedido pendente agora. **NÃO** baixa estoque aqui.
+        // Cria o pedido pendente (offline) e navega pro número
         const pedido = {
           createdAt: serverTimestamp(),
           itens: sacola,
@@ -223,19 +207,18 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
           total,
           pagamento: {
             provedor: "offline",
-            orderNumber, // ex.: "1", "12", "345", "9999"
+            orderNumber,
           },
         };
         await addDoc(collection(db, "pedidos"), pedido);
 
-        // limpa sacola e vai para tela do número (ajuste a sua rota)
         localStorage.removeItem("sacola");
         navigate(`/numero/${orderNumber}`);
         return;
       }
 
-      // === Online (Cielo) ===
-      // 1) cria um "intent" (sem baixar estoque)
+      // ======= ONLINE (CIELO) =======
+      // 1) Marcar "intent" (sem baixar estoque)
       await addDoc(collection(db, "checkoutIntents"), {
         createdAt: serverTimestamp(),
         orderNumber,
@@ -244,17 +227,24 @@ const ResumoBag = ({ quantidade, total, servico, onSelect }) => {
         status: "iniciado",
       });
 
-      // 2) cria o checkout e redireciona
-      const { checkoutUrl /*, cieloResponse*/ } = await criarCheckoutViaBackend({
-        sacola,
-        orderNumber,
-      });
+      // 2) **SALVAR** o número localmente ANTES de chamar a Cielo
+      //    -> fluxo de ReturnUrl fixa (sem precisar de ?order dinâmico)
+      localStorage.setItem("pendingOrderNumber", orderNumber);
+      localStorage.setItem("pendingOrderSavedAt", new Date().toISOString());
 
-      // limpa sacola e redireciona para a Cielo
+      // 3) Criar o checkout via backend (que já envia NotificationUrl e ReturnUrl fixos)
+      const { checkoutUrl } = await criarCheckoutViaBackend({ sacola, orderNumber });
+
+      // 4) Limpa sacola e redireciona para a Cielo
       localStorage.removeItem("sacola");
       window.location.href = checkoutUrl;
     } catch (error) {
       console.error("Erro ao finalizar pedido:", error);
+      // Se falhou após setar o pendingOrderNumber, limpa para não confundir a página de retorno
+      try {
+        localStorage.removeItem("pendingOrderNumber");
+        localStorage.removeItem("pendingOrderSavedAt");
+      } catch {}
       alert(error.message || "Erro ao finalizar pedido!");
     } finally {
       setLoading(false);

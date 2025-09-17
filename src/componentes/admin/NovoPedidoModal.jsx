@@ -3,8 +3,10 @@ import {
   Box, Typography, Paper, Table, TableHead, TableBody, TableRow, TableCell,
   Button, TextField, Stack, Modal, Backdrop, Fade, Checkbox, FormControlLabel,
   Divider, Dialog, DialogTitle, DialogContent, DialogActions,
-  Accordion, AccordionSummary, AccordionDetails, Radio, FormControl, FormControlLabel as RFormControlLabel
+  Accordion, AccordionSummary, AccordionDetails, Radio, FormControl, FormControlLabel as RFormControlLabel,
+  InputAdornment
 } from '@mui/material';
+import RadioGroup from '@mui/material/RadioGroup';
 import SearchIcon from '@mui/icons-material/Search';
 import TuneIcon from '@mui/icons-material/Tune';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -55,6 +57,8 @@ const toNumberBR = (v) => {
   return 0;
 };
 
+const formatBRL = (n) => `R$ ${Number(n || 0).toFixed(2).replace('.', ',')}`;
+
 const getDefaultSizeKey = (precos = {}, config = {}) => {
   const keys = Object.keys(precos || {});
   const hasSizes = config.habilitarTamanhos ?? (keys.length > 1);
@@ -74,7 +78,6 @@ const getOrderedSizeKeys = (precos = {}) => {
 
 // ========= Dialog para configurar UM item =========
 function ItemConfigDialog({ open, onClose, produto, value, onChange }) {
-  // SEM early return — para não quebrar a ordem dos hooks
   const safeProduto = produto || {};
   const cfg = safeProduto.config || {};
   const precos = safeProduto.precos || {};
@@ -130,7 +133,7 @@ function ItemConfigDialog({ open, onClose, produto, value, onChange }) {
                           sx={{ color: '#F75724', '&.Mui-checked': { color: '#F75724' } }}
                         />
                       }
-                      label={`${label} - R$ ${v.toFixed(2).replace('.', ',')}`}
+                      label={`${label} - ${formatBRL(v)}`}
                       sx={{ mr: 1 }}
                     />
                   );
@@ -199,18 +202,50 @@ function ItemConfigDialog({ open, onClose, produto, value, onChange }) {
 export default function NovoPedidoModal({ open, onClose, onCreated }) {
   const [produtos, setProdutos] = useState([]);
   const [busca, setBusca] = useState('');
-  const [qtds, setQtds] = useState({});                // { [id]: number }
-  const [configs, setConfigs] = useState({});          // { [id]: { tamanho, guarnicoes[], observacao } }
+  const [qtds, setQtds] = useState({});
+  const [configs, setConfigs] = useState({});
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [aprovarAgora, setAprovarAgora] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // dialog de item
   const [cfgOpen, setCfgOpen] = useState(false);
   const [cfgProduto, setCfgProduto] = useState(null);
 
-  // carrega catálogo ao abrir
+  // ===== Pagamento =====
+  const [pagamentoTipo, setPagamentoTipo] = useState('dinheiro'); // 'dinheiro' | 'pix' | 'cartao' | 'outro'
+  const [valorRecebido, setValorRecebido] = useState(''); // string para facilitar digitação com vírgula
+
+  // ---------- helpers para reset ----------
+  function makeInitialConfigs(list) {
+    const initial = {};
+    for (const p of list || []) {
+      const cfg = p?.config || {};
+      const defaultSize = getDefaultSizeKey(p?.precos || {}, cfg);
+      initial[p.id] = { tamanho: defaultSize, guarnicoes: [], observacao: '' };
+    }
+    return initial;
+  }
+
+  function resetForm(list) {
+    setBusca('');
+    setQtds({});
+    setConfigs(makeInitialConfigs(list ?? produtos));
+    setNome('');
+    setTelefone('');
+    setAprovarAgora(true);
+    setPagamentoTipo('dinheiro');
+    setValorRecebido('');
+    setCfgOpen(false);
+    setCfgProduto(null);
+  }
+
+  const handleCloseModal = () => {
+    resetForm(produtos);
+    onClose?.();
+  };
+
+  // carrega catálogo ao abrir (e já reseta tudo)
   useEffect(() => {
     if (!open) return;
     (async () => {
@@ -219,15 +254,7 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
         setProdutos(list);
-
-        // default configs
-        const initialCfgs = {};
-        for (const p of list) {
-          const cfg = p.config || {};
-          const defaultSize = getDefaultSizeKey(p.precos || {}, cfg);
-          initialCfgs[p.id] = { tamanho: defaultSize, guarnicoes: [], observacao: '' };
-        }
-        setConfigs(initialCfgs);
+        resetForm(list);
       } catch (e) {
         console.error('Erro ao carregar produtos:', e);
       }
@@ -248,7 +275,7 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
     setConfigs(prev => ({ ...prev, [produtoId]: nextCfg }));
   };
 
-  // itens selecionados (com tamanho/guarnições/observação)
+  // itens selecionados
   const itensSelecionados = useMemo(() => {
     return produtos
       .filter(p => (qtds[p.id] || 0) > 0)
@@ -277,13 +304,21 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
     0
   );
 
-  const filtrados = produtos.filter(p => {
-    const t = busca.toLowerCase();
-    return (
-      (p.nome || '').toLowerCase().includes(t) ||
-      (p.categoria || '').toLowerCase().includes(t)
-    );
+  // ====== FILTRO: apenas nome e código ======
+  const termo = busca.trim().toLowerCase();
+  const filtrados = produtos.filter((p) => {
+    if (termo === '') return true;
+    const nome = (p.nome || '').toLowerCase();
+    const codigo = String(p.codigo || '').toLowerCase();
+    return nome.includes(termo) || codigo.includes(termo);
   });
+
+  // ===== Pagamento: cálculos de troco / validação =====
+  const valorRecebidoNum = pagamentoTipo === 'dinheiro' ? toNumberBR(valorRecebido) : 0;
+  const troco = pagamentoTipo === 'dinheiro' ? Math.max(0, valorRecebidoNum - total) : 0;
+  const falta = pagamentoTipo === 'dinheiro' ? Math.max(0, total - valorRecebidoNum) : 0;
+
+  const canApprove = !(aprovarAgora && pagamentoTipo === 'dinheiro' && valorRecebidoNum < total);
 
   const handleCriar = async () => {
     try {
@@ -296,10 +331,22 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
         return;
       }
 
+      if (aprovarAgora && pagamentoTipo === 'dinheiro' && valorRecebidoNum < total) {
+        alert('Valor recebido em dinheiro é menor que o total. Ajuste antes de aprovar.');
+        setLoading(false);
+        return;
+      }
+
       const orderNumber = await getNextDailyOrderNumber();
 
+      const pagamentoData = {
+        provedor: 'offline',
+        orderNumber,
+        tipo: pagamentoTipo,
+        ...(pagamentoTipo === 'dinheiro' ? { valorRecebido: valorRecebidoNum, troco } : {})
+      };
+
       if (!aprovarAgora) {
-        // criar como pendente (não baixa estoque)
         await addDoc(collection(db, 'pedidos'), {
           createdAt: serverTimestamp(),
           itens: itensSelecionados,
@@ -308,34 +355,64 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
           total,
           nome: nome || '',
           telefone: telefone || '',
-          pagamento: { provedor: 'offline', orderNumber },
+          pagamento: pagamentoData,
         });
 
         localStorage.setItem('lastOrderNumber', orderNumber);
         localStorage.setItem('lastOrderSavedAt', new Date().toISOString());
 
+        resetForm(produtos);
         onCreated?.();
-        onClose?.();
+        handleCloseModal();
         return;
       }
 
-      // Aprovar agora: baixa estoque na transação e grava como aprovado
+      // ====== TRANSAÇÃO CORRIGIDA: TODAS AS LEITURAS ANTES DE QUALQUER ESCRITA ======
       await runTransaction(db, async (transaction) => {
+        // 1) Agrega quantidades por produto
+        const mapaQtd = new Map(); // id -> qtd total
         for (const item of itensSelecionados) {
-          const prodRef = doc(db, 'produtos', item.id);
-          const snap = await transaction.get(prodRef);
-          if (!snap.exists()) throw new Error(`Produto ${item.id} não encontrado.`);
-
-          const dados = snap.data();
-          const estoqueAtual = Number(dados?.estoque ?? 0);
-          if (estoqueAtual < item.quantidade) {
-            throw new Error(
-              `Estoque insuficiente para "${dados?.nome || item.id}". Disp.: ${estoqueAtual}, solic.: ${item.quantidade}`
-            );
-          }
-          transaction.update(prodRef, { estoque: estoqueAtual - item.quantidade });
+          const id = item.id;
+          const qtd = Number(item.quantidade ?? item.quantity ?? 0);
+          if (!id || !qtd) continue;
+          mapaQtd.set(id, (mapaQtd.get(id) || 0) + qtd);
         }
 
+        // 2) Referências e TODAS as leituras
+        const prodIds = Array.from(mapaQtd.keys());
+        const prodRefs = prodIds.map((pid) => doc(db, 'produtos', pid));
+
+        const snaps = [];
+        for (const ref of prodRefs) {
+          const snap = await transaction.get(ref);
+          if (!snap.exists()) throw new Error(`Produto ${ref.id} não encontrado.`);
+          snaps.push(snap);
+        }
+
+        // 3) Valida estoques com base nas leituras
+        snaps.forEach((snap, idx) => {
+          const pid = prodIds[idx];
+          const dados = snap.data();
+          const estoqueAtual = Number(dados?.estoque ?? 0);
+          const qtdNecessaria = mapaQtd.get(pid) || 0;
+          if (estoqueAtual < qtdNecessaria) {
+            throw new Error(
+              `Estoque insuficiente para "${dados?.nome || pid}". ` +
+              `Disp.: ${estoqueAtual}, solic.: ${qtdNecessaria}`
+            );
+          }
+        });
+
+        // 4) Escritas: atualiza estoques
+        snaps.forEach((snap, idx) => {
+          const pid = prodIds[idx];
+          const dados = snap.data();
+          const estoqueAtual = Number(dados?.estoque ?? 0);
+          const qtdNecessaria = mapaQtd.get(pid) || 0;
+          transaction.update(prodRefs[idx], { estoque: estoqueAtual - qtdNecessaria });
+        });
+
+        // 5) Cria o pedido aprovado
         const pedidosRef = collection(db, 'pedidos');
         const novoRef = doc(pedidosRef);
         transaction.set(novoRef, {
@@ -346,32 +423,22 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
           total,
           nome: nome || '',
           telefone: telefone || '',
-          pagamento: { provedor: 'offline', orderNumber },
+          pagamento: pagamentoData,
         });
       });
 
       localStorage.setItem('lastOrderNumber', orderNumber);
       localStorage.setItem('lastOrderSavedAt', new Date().toISOString());
 
+      resetForm(produtos);
       onCreated?.();
-      onClose?.();
+      handleCloseModal();
     } catch (e) {
       console.error('Erro ao criar pedido:', e);
       alert(e?.message || 'Falha ao criar o pedido.');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Exibição de “resumo” do que foi configurado no botão
-  const getResumoConfig = (p) => {
-    const c = configs[p.id];
-    if (!c) return 'Detalhes';
-    const parts = [];
-    if (c.tamanho) parts.push(c.tamanho === 'medio' ? 'médio' : c.tamanho);
-    if (Array.isArray(c.guarnicoes) && c.guarnicoes.length > 0) parts.push(`${c.guarnicoes.length} guarn.`);
-    if (c.observacao) parts.push('obs.');
-    return parts.length ? parts.join(' • ') : 'Detalhes';
   };
 
   const precoRefAtual = (p) => {
@@ -387,7 +454,7 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
       {/* MODAL PRINCIPAL */}
       <Modal
         open={open}
-        onClose={onClose}
+        onClose={handleCloseModal}
         closeAfterTransition
         BackdropComponent={Backdrop}
         BackdropProps={{ timeout: 250 }}
@@ -425,7 +492,7 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
             </Stack>
 
             <TextField
-              placeholder="Buscar por nome/categoria..."
+              placeholder="Buscar por nome ou código..."
               size="small"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
@@ -445,6 +512,7 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600 }}>Produto</TableCell>
+                    <TableCell sx={{ fontWeight: 600, width: 120 }}>Código</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Categoria</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Preço (unit.)</TableCell>
                     <TableCell sx={{ fontWeight: 600, width: 160 }}>Quantidade</TableCell>
@@ -458,8 +526,9 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
                     return (
                       <TableRow key={p.id}>
                         <TableCell>{p.nome || '-'}</TableCell>
+                        <TableCell>{p.codigo || '-'}</TableCell>
                         <TableCell>{p.categoria || '-'}</TableCell>
-                        <TableCell>R$ {unit.toFixed(2)}</TableCell>
+                        <TableCell>{formatBRL(unit)}</TableCell>
                         <TableCell>
                           <Stack direction="row" spacing={1} alignItems="center">
                             <Button
@@ -507,6 +576,7 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
               </Table>
             </Paper>
 
+            {/* RESUMO + PAGAMENTO */}
             <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
               <FormControlLabel
                 control={
@@ -518,20 +588,79 @@ export default function NovoPedidoModal({ open, onClose, onCreated }) {
                 label="Aprovar agora (baixar estoque imediatamente)"
               />
               <Typography sx={{ fontWeight: 800, fontSize: 18 }}>
-                Total: R$ {total.toFixed(2)}
+                Total: {formatBRL(total)}
               </Typography>
             </Stack>
+
+            <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+              <Typography fontWeight={700} sx={{ mb: 1 }}>Forma de pagamento</Typography>
+              <RadioGroup
+                row
+                value={pagamentoTipo}
+                onChange={(e) => setPagamentoTipo(e.target.value)}
+              >
+                <RFormControlLabel
+                  value="dinheiro"
+                  control={<Radio sx={{ color: '#F75724', '&.Mui-checked': { color: '#F75724' } }} />}
+                  label="Dinheiro"
+                />
+                <RFormControlLabel
+                  value="pix"
+                  control={<Radio sx={{ color: '#F75724', '&.Mui-checked': { color: '#F75724' } }} />}
+                  label="PIX"
+                />
+                <RFormControlLabel
+                  value="cartao"
+                  control={<Radio sx={{ color: '#F75724', '&.Mui-checked': { color: '#F75724' } }} />}
+                  label="Cartão"
+                />
+                <RFormControlLabel
+                  value="outro"
+                  control={<Radio sx={{ color: '#F75724', '&.Mui-checked': { color: '#F75724' } }} />}
+                  label="Outro"
+                />
+              </RadioGroup>
+
+              {pagamentoTipo === 'dinheiro' && (
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2 }} alignItems="center">
+                  <TextField
+                    label="Valor recebido"
+                    value={valorRecebido}
+                    onChange={(e) => setValorRecebido(e.target.value)}
+                    placeholder="0,00"
+                    inputProps={{ inputMode: 'decimal' }}
+                    sx={{ maxWidth: 240 }}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">R$</InputAdornment>
+                    }}
+                  />
+                  {valorRecebido !== '' && (
+                    <>
+                      {falta > 0 ? (
+                        <Typography sx={{ color: '#b91c1c', fontWeight: 700 }}>
+                          Falta: {formatBRL(falta)}
+                        </Typography>
+                      ) : (
+                        <Typography sx={{ color: '#047857', fontWeight: 700 }}>
+                          Troco: {formatBRL(troco)}
+                        </Typography>
+                      )}
+                    </>
+                  )}
+                </Stack>
+              )}
+            </Paper>
 
             <Divider sx={{ mb: 2 }} />
 
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button onClick={onClose} color="inherit" sx={{ textTransform: 'none' }}>
+              <Button onClick={handleCloseModal} color="inherit" sx={{ textTransform: 'none' }}>
                 Cancelar
               </Button>
               <Button
                 variant="contained"
                 onClick={handleCriar}
-                disabled={loading}
+                disabled={loading || !canApprove}
                 sx={{
                   bgcolor: '#F75724',
                   textTransform: 'none',

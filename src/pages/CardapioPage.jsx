@@ -8,6 +8,7 @@ import TabSelection from "../componentes/TabSelection";
 import ToolBar from "../componentes/ToolBar";
 import ProductCard from "../componentes/productCard";
 import ResumoPedido from "../componentes/resumoPedido";
+import logo from '../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg';
 import { useNavigate } from "react-router-dom";
 
 function CardapioPage() {
@@ -234,6 +235,7 @@ function CardapioPage() {
             semEstoque={Number(produto.estoque ?? 0) <= 0}
             onAdd={() => handleAdicionarProduto(produto)}
             onView={() => handleAbrirDetalhe(produto.id)}
+            fallbackLogo={logo}
           />
           </Box>
         ))}

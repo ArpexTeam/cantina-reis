@@ -25,6 +25,7 @@ import { db } from '../../firebase';
 
 export default function AddProductModal({ open, onClose, onProdutoAdicionado }) {
   const [nome, setNome] = useState('');
+  const [codigo, setCodigo] = useState('');               // <-- NOVO: código
   const [descricao, setDescricao] = useState('');
   const [precos, setPrecos] = useState({ pequeno: '', medio: '', executivo: '' });
   const [status, setStatus] = useState('Disponível');
@@ -74,6 +75,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
 
   const resetForm = () => {
     setNome('');
+    setCodigo('');                                        // <-- NOVO: reset código
     setDescricao('');
     setPrecos({ pequeno: '', medio: '', executivo: '' });
     setStatus('Disponível');
@@ -156,7 +158,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
         finalImageUrl = data.secure_url;
       }
 
-      // Preços conforme config: se não habilitar tamanhos, salva apenas "pequeno" (preço único)
+      // Preços conforme config
       const precosFinal = config.habilitarTamanhos
         ? {
             pequeno: precos.pequeno || '',
@@ -172,6 +174,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
 
       const novoProduto = {
         nome,
+        codigo: codigo?.trim() || null,                  // <-- NOVO: campo salvo no Firestore
         descricao,
         precos: precosFinal,
         status,
@@ -222,7 +225,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
           </Typography>
         </Paper>
 
-        {/* Imagem e Nome */}
+        {/* Imagem e Dados básicos */}
         <Paper sx={{ p: 3, mb: 1, width:'100%' }}>
           <Box sx={{ display: "flex", gap: 5 }}>
             <Grid item xs={4}>
@@ -267,14 +270,25 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
                 </IconButton>
               </Box>
             </Grid>
+
             <Grid item xs={8}>
-              <TextField
-                fullWidth
-                label="Nome"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                sx={{ mb: 2 }}
-              />
+              {/* Linha: Código + Nome */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '220px 1fr' }, gap: 2, mb: 2 }}>
+                <TextField
+                  label="Código"
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value)}
+                  size="small"
+                />
+                <TextField
+                  label="Nome"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  size="small"
+                  fullWidth
+                />
+              </Box>
+
               <TextField
                 fullWidth
                 label="Descrição"
@@ -324,7 +338,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
           </Box>
         </Paper>
 
-        {/* Preços + Categoria + Status */}
+        {/* Preços / Categoria / Status */}
         <Paper sx={{ p: 3, mb: 1 }}>
           <Typography fontWeight={500} fontSize={16} mb={2}>Preços / Categoria / Status</Typography>
 
@@ -368,7 +382,7 @@ export default function AddProductModal({ open, onClose, onProdutoAdicionado }) 
                       fontWeight: 500,
                     },
                   }}
-                  label={`${size == 'executivo' ? 'Prato': 'Preço'} ${size}`}
+                  label={`${size === 'executivo' ? 'Prato' : 'Preço'} ${size}`}
                   sx={{
                     width: 150,
                     '& .MuiOutlinedInput-root': { mt: 0.5 },

@@ -21,14 +21,32 @@ const menorPreco = (precos = {}) =>
     .filter((v) => Number.isFinite(v) && v > 0)
     .sort((a, b) => a - b)[0];
 
-export default function ProductCard({ produto, onAdd, onView, semEstoque = false }) {
+export default function ProductCard({
+  produto,
+  onAdd,
+  onView,
+  semEstoque = false,
+  // passe seu logo aqui (png/svg branco). Ex.: import cantinaLogo from "../../img/cantina-logo.png"
+  fallbackLogo,
+  // customize se quiser:
+  fallbackGradient = "linear-gradient(135deg, #FF6B2C 0%, #111827 100%)",
+  logoMaxWidth = "70%",
+  logoMaxHeight = "70%",
+}) {
   const { nome, descricao, imagem, precos } = produto ?? {};
 
   const precoNum = menorPreco(precos ?? {});
   const temPreco = Number.isFinite(precoNum);
   const precoFmt = temPreco
     ? precoNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : "Consultar";
+    : null;
+
+  // controle do fallback
+  const [showFallback, setShowFallback] = React.useState(!imagem);
+
+  React.useEffect(() => {
+    setShowFallback(!imagem);
+  }, [imagem]);
 
   // Pode adicionar apenas se tiver preço válido e tiver estoque
   const podeAdicionar = temPreco && !semEstoque;
@@ -73,7 +91,7 @@ export default function ProductCard({ produto, onAdd, onView, semEstoque = false
         />
       )}
 
-      {/* Imagem */}
+      {/* Área de imagem */}
       <Box
         sx={{
           width: "168px",
@@ -81,13 +99,57 @@ export default function ProductCard({ produto, onAdd, onView, semEstoque = false
           borderRadius: "5px",
           overflow: "hidden",
           filter: semEstoque ? "grayscale(100%)" : "none",
+          background: showFallback ? fallbackGradient : "#F3F4F6",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
-        <img
-          src={imagem}
-          alt={nome}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
+        {!showFallback ? (
+          <img
+            src={imagem}
+            alt={nome || "Produto"}
+            loading="lazy"
+            draggable={false}
+            onError={() => setShowFallback(true)}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        ) : fallbackLogo ? (
+          // Fallback com logo (menor) sobre gradient
+          <img
+            src={fallbackLogo}
+            alt="Logo da cantina"
+            draggable={false}
+            style={{
+              maxWidth: logoMaxWidth,
+              maxHeight: logoMaxHeight,
+              width: "auto",
+              height: "auto",
+              objectFit: "contain",
+              display: "block",
+              // dá contraste no logo branco
+              filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.35))",
+            }}
+          />
+        ) : (
+          // fallback mínimo caso não tenha passado logo
+          <Box
+            sx={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#fff",
+              opacity: 0.9,
+              letterSpacing: 1,
+            }}
+          >
+            CANTINA
+          </Box>
+        )}
       </Box>
 
       {/* Texto */}
@@ -136,7 +198,7 @@ export default function ProductCard({ produto, onAdd, onView, semEstoque = false
             color: "#111827",
           }}
         >
-          R$ {precoFmt}
+          {temPreco ? `R$ ${precoFmt}` : "Consultar"}
         </Typography>
       </Box>
 

@@ -26,6 +26,9 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import ResumoPedido from '../componentes/resumoPedido';
 
+
+import cantinaLogo from '../img/ChatGPT Image 23 de abr. de 2025, 20_03_44 (1) 2.svg';
+
 const ProdutoIndividual = () => {
   const [quantidade, setQuantidade] = useState(1);
   const [produto, setProduto] = useState(null);
@@ -33,6 +36,10 @@ const ProdutoIndividual = () => {
   const [guarnicoesSelecionadas, setGuarnicoesSelecionadas] = useState([]);
   const [observacao, setObservacao] = useState('');
   const [quantidadeSacola, setQuantidadeSacola] = useState(0);
+
+  // fallback visual da imagem
+  const [showFallback, setShowFallback] = useState(false);
+  const fallbackGradient = 'linear-gradient(135deg, #FF6B2C 0%, #111827 100%)';
 
   const navigate = useNavigate();
   const { id } = useParams();
@@ -78,6 +85,9 @@ const ProdutoIndividual = () => {
               maxGuarnicoes: Number(cfg.maxGuarnicoes ?? 2),
             },
           });
+
+          // define se já começa no fallback (sem imagem no produto)
+          setShowFallback(!p.imagem);
         }
       } catch (error) {
         console.error('Erro ao buscar produto:', error);
@@ -91,6 +101,12 @@ const ProdutoIndividual = () => {
     const total = sacola.reduce((acc, p) => acc + Number(p.quantity || 0), 0);
     setQuantidadeSacola(total);
   }, [id]);
+
+  // quando a URL de imagem mudar, recalcula fallback
+  useEffect(() => {
+    if (!produto) return;
+    setShowFallback(!produto.imagem);
+  }, [produto?.imagem]);
 
   if (!produto) {
     return (
@@ -225,19 +241,51 @@ const ProdutoIndividual = () => {
             gridTemplateColumns: { xs: '1fr', md: '5fr 7fr' },
           }}
         >
-          {/* Imagem */}
+          {/* Imagem com Fallback */}
           <Box sx={{ position: 'relative' }}>
             <Box
-              component="img"
-              src={produto.imagem}
-              alt={produto.nome}
               sx={{
                 width: '100%',
                 height: { xs: 260, md: '100%' },
-                objectFit: 'cover',
-                display: 'block',
+                minHeight: { md: 360 }, // garante uma área boa no desktop
+                background: showFallback ? fallbackGradient : '#000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
               }}
-            />
+            >
+              {!showFallback ? (
+                <img
+                  src={produto.imagem}
+                  alt={produto.nome}
+                  onError={() => setShowFallback(true)}
+                  loading="lazy"
+                  draggable={false}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <img
+                  src={cantinaLogo}
+                  alt="Logo da cantina"
+                  draggable={false}
+                  style={{
+                    maxWidth: '55%',
+                    maxHeight: '55%',
+                    width: 'auto',
+                    height: 'auto',
+                    objectFit: 'contain',
+                    filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.35))',
+                  }}
+                />
+              )}
+            </Box>
+
             <IconButton
               onClick={() => navigate(-1)}
               sx={{

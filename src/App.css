@@ -1,9 +1,9 @@
-.App {
-  text-align: center;
 
-   display: flex;
+.App {                 /* seu wrapper raiz atual */
+  min-height: 100vh;
+  display: flex;
   flex-direction: column;
-  min-height: 100%;
+  background: #F1F1F1;
 }
 
 html, body, #root {
@@ -12,8 +12,11 @@ html, body, #root {
 }
 
 
-.main-content {
-  flex: 1; /* ocupa todo o espaço possível */
+.main-content {        /* <main class="main-content"> */
+  flex: 1 1 auto;      /* cresce e empurra o footer */
+  overflow: visible;   /* não esconda conteúdo */
+  min-height: 0;       /* evita “travamento” em layouts flex */
+  background: #F2F2F2;
 }
 
 .App-logo {

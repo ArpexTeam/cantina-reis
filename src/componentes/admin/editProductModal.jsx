@@ -25,6 +25,7 @@ import { db } from '../../firebase';
 
 export default function EditProductModal({ open, onClose, produtoSelecionado }) {
   const [nome, setNome] = useState('');
+  const [codigo, setCodigo] = useState(''); // <-- NOVO: estado do código
   const [descricao, setDescricao] = useState('');
   const [precos, setPrecos] = useState({ pequeno: '', medio: '', executivo: '' });
   const [status, setStatus] = useState('Disponível');
@@ -38,7 +39,7 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
   const [categoria, setCategoria] = useState('');
   const [categorias, setCategorias] = useState([]);
 
-  // Config dinâmica (sem tamanhoObrigatorio)
+  // Config dinâmica
   const [config, setConfig] = useState({
     habilitarTamanhos: false,
     habilitarGuarnicoes: false,
@@ -63,9 +64,11 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
     if (open) fetchCategorias().catch(() => {});
   }, [open]);
 
+  // Preenche os campos com o produto selecionado
   useEffect(() => {
     if (produtoSelecionado) {
       setNome(produtoSelecionado.nome || '');
+      setCodigo(produtoSelecionado.codigo || ''); // <-- NOVO
       setDescricao(produtoSelecionado.descricao || '');
       setPrecos(produtoSelecionado.precos || { pequeno: '', medio: '', executivo: '' });
       setStatus(produtoSelecionado.status || 'Disponível');
@@ -149,6 +152,7 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
     const produtoRef = doc(db, 'produtos', produtoSelecionado.id);
     await updateDoc(produtoRef, {
       nome,
+      codigo: codigo?.trim() || null, // <-- NOVO: salvar código
       descricao,
       precos: precosFinal,
       status,
@@ -162,7 +166,6 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
         habilitarGuarnicoes: !!config.habilitarGuarnicoes,
         maxGuarnicoes: Number(config.maxGuarnicoes ?? 2),
       },
-      // ❌ Sem campos fiscais
     });
 
     alert('Produto atualizado com sucesso!');
@@ -190,7 +193,7 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
           </Typography>
         </Paper>
 
-        {/* Imagem e Nome */}
+        {/* Imagem e Dados básicos */}
         <Paper sx={{ p: 3, mb: 1, width: '100%' }}>
           <Box sx={{ display: "flex", gap: 5 }}>
             <Grid item xs={4}>
@@ -235,14 +238,25 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
                 </IconButton>
               </Box>
             </Grid>
+
             <Grid item xs={8}>
-              <TextField
-                fullWidth
-                label="Nome"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                sx={{ mb: 2 }}
-              />
+              {/* Linha: Código + Nome (como no Add) */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '220px 1fr' }, gap: 2, mb: 2 }}>
+                <TextField
+                  label="Código"
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value)}
+                  size="small"
+                />
+                <TextField
+                  fullWidth
+                  label="Nome"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  size="small"
+                />
+              </Box>
+
               <TextField
                 fullWidth
                 label="Descrição"
@@ -336,7 +350,7 @@ export default function EditProductModal({ open, onClose, produtoSelecionado }) 
                       fontWeight: 500,
                     },
                   }}
-                  label={`${size == 'executivo' ? 'Prato': 'Preço'} ${size}`}
+                  label={`${size === 'executivo' ? 'Prato' : 'Preço'} ${size}`}
                   sx={{
                     width: 150,
                     '& .MuiOutlinedInput-root': { mt: 0.5 },

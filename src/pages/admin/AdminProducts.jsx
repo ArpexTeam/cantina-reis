@@ -27,7 +27,6 @@ import AddProductModal from '../../componentes/admin/addProductModal';
 
 export default function AdminProducts() {
   const [produtos, setProdutos] = useState([]);
-  // Agora categorias guarda objetos { id, nome } para permitir excluir
   const [categorias, setCategorias] = useState([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
@@ -50,28 +49,22 @@ export default function AdminProducts() {
     setModalOpen(true);
   };
 
-  // Mantive compat: quando o modal de adicionar chamar, já injeta no estado.
-  // Com onSnapshot isso não é necessário, mas não atrapalha.
   const handleProdutoAdicionado = (produtoComId) => {
     setProdutos((prev) => [...prev, produtoComId]);
   };
 
   // ======= Tempo real: produtos + categorias =======
   useEffect(() => {
-    // Produtos (ordena por nome para consistência visual)
     const unsubProdutos = onSnapshot(collection(db, 'produtos'), (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      // Ordena por nome (se existir)
       list.sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
       setProdutos(list);
     }, (err) => console.error('onSnapshot produtos:', err));
 
-    // Categorias (agora guardando id e nome)
     const unsubCategorias = onSnapshot(collection(db, 'categorias'), (snap) => {
       const list = snap.docs
         .map((d) => ({ id: d.id, nome: d.data()?.nome }))
         .filter((c) => c.nome);
-      // ordena alfabeticamente
       list.sort((a, b) => a.nome.localeCompare(b.nome));
       setCategorias(list);
     }, (err) => console.error('onSnapshot categorias:', err));
@@ -89,7 +82,6 @@ export default function AdminProducts() {
       await addDoc(collection(db, 'categorias'), { nome: newCategoryName.trim() });
       setNewCategoryName('');
       setAddCategoryModalOpen(false);
-      // onSnapshot atualiza a UI sozinho
     } catch (error) {
       console.error('Erro ao adicionar categoria:', error);
     }
@@ -102,10 +94,7 @@ export default function AdminProducts() {
 
     try {
       await deleteDoc(doc(db, 'categorias', String(id)));
-      // onSnapshot atualiza o menu automaticamente
-      if (categoriaSelecionada === nome) {
-        setCategoriaSelecionada('');
-      }
+      if (categoriaSelecionada === nome) setCategoriaSelecionada('');
     } catch (e) {
       console.error('Erro ao excluir categoria:', e);
       alert(e?.message || 'Falha ao excluir a categoria.');
@@ -120,10 +109,8 @@ export default function AdminProducts() {
     try {
       setDeletingId(id);
       await deleteDoc(doc(db, 'produtos', String(id)));
-      // onSnapshot atualiza a tabela automaticamente
     } catch (e) {
       console.error('Erro ao excluir produto:', e);
-      // Mostra mensagem mais clara (muito comum: regras do Firestore)
       alert(e?.message || 'Falha ao excluir o produto.');
     } finally {
       setDeletingId(null);
@@ -156,17 +143,18 @@ export default function AdminProducts() {
     }
   };
 
-  // Filtro/pesquisa
+  // ====== Filtro/pesquisa (APENAS nome e código) ======
+  const termo = searchTerm.trim().toLowerCase();
   const produtosFiltrados = produtos.filter((p) => {
-    const searchMatch = Object.values(p).some((v) =>
-      typeof v === 'string' && v.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const nome = (p.nome || '').toLowerCase();
+    const codigo = String(p.codigo || '').toLowerCase();
+    const searchMatch = termo === '' || nome.includes(termo) || codigo.includes(termo);
     const categoriaMatch = categoriaSelecionada ? p.categoria === categoriaSelecionada : true;
     return searchMatch && categoriaMatch;
   });
 
   const totalPages = Math.ceil(produtosFiltrados.length / itemsPerPage) || 1;
-  const current = Math.min(currentPage, totalPages); // evita ficar em página inválida após updates
+  const current = Math.min(currentPage, totalPages);
   const produtosExibidos = produtosFiltrados.slice(
     (current - 1) * itemsPerPage,
     current * itemsPerPage
@@ -180,7 +168,6 @@ export default function AdminProducts() {
     handleCloseCategorias();
   };
 
-  // Para compatibilidade com AddProductModal, passamos apenas os nomes
   const categoriasNomes = categorias.map(c => c.nome);
 
   return (
@@ -257,7 +244,7 @@ export default function AdminProducts() {
                     style={{ width: 15, cursor: 'pointer' }}
                     title="Excluir categoria"
                     onClick={(e) => {
-                      e.stopPropagation(); // evita selecionar a categoria ao clicar na lixeira
+                      e.stopPropagation();
                       handleDeleteCategoria(cat.id, cat.nome);
                     }}
                   />
@@ -266,7 +253,7 @@ export default function AdminProducts() {
             </Menu>
 
             <TextField
-              placeholder="Search"
+              placeholder="Buscar por nome ou código"
               size="small"
               variant="outlined"
               value={searchTerm}
@@ -322,7 +309,7 @@ export default function AdminProducts() {
               </TableHead>
               <TableBody>
                 {produtosExibidos.map((produto) => {
-                  const estoqueMin = produto.estoqueMin ?? produto.estoqueMinimo ?? 0; // compatibilidade
+                  const estoqueMin = produto.estoqueMin ?? produto.estoqueMinimo ?? 0;
                   const statusEstoque = calcularStatusEstoque(produto.estoque, estoqueMin);
                   return (
                     <TableRow key={produto.id}>
@@ -346,33 +333,21 @@ export default function AdminProducts() {
                           {statusEstoque}
                         </Box>
                       </TableCell>
-                      <TableCell sx={{
-                        display:'flex',
-                        gap:2,
-                        padding:3
-                      }}>
+                      <TableCell sx={{ display:'flex', gap:2, padding:3 }}>
                         <img
                           src={pen}
-                          style={{
-                            width:15,
-                            cursor:'pointer',
-                          }}
+                          style={{ width:15, cursor:'pointer' }}
                           onClick={() => handleEditClick(produto)}
                           title="Editar"
                         />
-
                         <img
                           src={trash}
-                          style={{
-                            width:15,
-                            cursor:'pointer',
-                          }}
+                          style={{ width:15, cursor:'pointer' }}
                           onClick={() => handleDelete(produto.id, produto.nome)}
                           disabled={deletingId === produto.id}
                           title={deletingId === produto.id ? 'Excluindo...' : 'Excluir'}
                         />
                       </TableCell>
-
                     </TableRow>
                   );
                 })}
